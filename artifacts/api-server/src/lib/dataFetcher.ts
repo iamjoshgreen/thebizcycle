@@ -213,13 +213,13 @@ export async function fetchAndCompute(): Promise<ChartPayload> {
   const oilWeekly = forwardFill(oilMap, fridays);
   const dgs10Weekly = forwardFill(dgs10Map, fridays);
   const t10y2yWeekly = forwardFill(t10y2yMap, fridays);
-  // BTC: map close prices to the Friday grid (no forward-fill needed — just use what we have)
-  const btcWeekly = new Map<number, number>();
-  for (const friday of fridays) {
-    const ts = toUnix(friday);
-    const v = btcMap.get(ts);
-    if (v !== undefined) btcWeekly.set(ts, v);
+  // BTC: convert map to a date-string map then forward-fill onto the Friday grid
+  const btcDateMap = new Map<string, number>();
+  for (const [ts, v] of btcMap.entries()) {
+    const dateStr = new Date(ts * 1000).toISOString().slice(0, 10);
+    btcDateMap.set(dateStr, v);
   }
+  const btcWeekly = forwardFill(btcDateMap, fridays);
 
   // Compute composite: (SPX × FEDFUNDS × CPIAUCSL) / (UNRATE² × M2SL)
   const composite: DataPoint[] = [];
