@@ -27,6 +27,7 @@ export interface Overlays {
   fedfunds: DataPoint[];
   dgs10: DataPoint[];
   t10y2y: DataPoint[];
+  btc: DataPoint[];
 }
 
 export const OVERLAY_CONFIG: {
@@ -44,6 +45,7 @@ export const OVERLAY_CONFIG: {
   { id: "fedfunds", label: "Fed Funds",       color: "#A855F7", description: "Federal funds rate %" },
   { id: "dgs10",    label: "10Y Treasury",    color: "#10B981", description: "10-year treasury yield %" },
   { id: "t10y2y",   label: "Yield Curve",     color: "#EF4444", description: "10Y–2Y spread (negative = inverted)" },
+  { id: "btc",      label: "BTC",             color: "#F97316", description: "Bitcoin / USD price" },
 ];
 
 export interface ChartHandle {

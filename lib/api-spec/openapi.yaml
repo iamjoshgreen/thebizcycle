@@ -140,9 +140,14 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DataPoint"
+        btc:
+          type: array
+          items:
+            $ref: "#/components/schemas/DataPoint"
       required:
         - oil
         - unrate
         - fedfunds
         - dgs10
         - t10y2y
+        - btc

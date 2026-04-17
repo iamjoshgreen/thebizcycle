@@ -22,6 +22,7 @@ interface Overlays {
   fedfunds: DataPoint[];
   dgs10: DataPoint[];
   t10y2y: DataPoint[];
+  btc: DataPoint[];
 }
 
 export interface ChartPayload {
@@ -120,18 +121,25 @@ function mapToSeries(m: Map<number, number>): DataPoint[] {
 }
 
 export async function fetchAndCompute(): Promise<ChartPayload> {
-  logger.info("Fetching Yahoo Finance SPX data...");
+  logger.info("Fetching Yahoo Finance SPX + BTC data...");
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const startDate = new Date("1959-01-02");
 
   // Include the current partial week so the latest close is always visible
-  const spxResult = await yahooFinance.chart("^GSPC", {
-    period1: "1959-01-01",
-    period2: today.toISOString().slice(0, 10),
-    interval: "1wk",
-  });
+  const [spxResult, btcResult] = await Promise.all([
+    yahooFinance.chart("^GSPC", {
+      period1: "1959-01-01",
+      period2: today.toISOString().slice(0, 10),
+      interval: "1wk",
+    }),
+    yahooFinance.chart("BTC-USD", {
+      period1: "2010-01-01",
+      period2: today.toISOString().slice(0, 10),
+      interval: "1wk",
+    }),
+  ]);
 
   const spxMap = new Map<number, number>();
   if (spxResult.quotes) {
@@ -154,7 +162,23 @@ export async function fetchAndCompute(): Promise<ChartPayload> {
     }
   }
 
-  logger.info(`SPX data: ${spxMap.size} weekly bars`);
+  // Build BTC price map (same Friday-alignment logic as SPX)
+  const btcMap = new Map<number, number>();
+  if (btcResult.quotes) {
+    for (const q of btcResult.quotes) {
+      if (q.date && q.close != null) {
+        const barDate = new Date(q.date);
+        barDate.setHours(0, 0, 0, 0);
+        const d = new Date(barDate);
+        const dow = d.getDay();
+        if (dow !== 5) d.setDate(d.getDate() + (dow === 0 ? 5 : 5 - dow));
+        const ts = d > today ? toUnix(today) : toUnix(d);
+        btcMap.set(ts, q.close);
+      }
+    }
+  }
+
+  logger.info(`SPX data: ${spxMap.size} weekly bars, BTC: ${btcMap.size} weekly bars`);
   logger.info("Fetching FRED data...");
 
   // Fetch all series in parallel
@@ -189,6 +213,13 @@ export async function fetchAndCompute(): Promise<ChartPayload> {
   const oilWeekly = forwardFill(oilMap, fridays);
   const dgs10Weekly = forwardFill(dgs10Map, fridays);
   const t10y2yWeekly = forwardFill(t10y2yMap, fridays);
+  // BTC: map close prices to the Friday grid (no forward-fill needed — just use what we have)
+  const btcWeekly = new Map<number, number>();
+  for (const friday of fridays) {
+    const ts = toUnix(friday);
+    const v = btcMap.get(ts);
+    if (v !== undefined) btcWeekly.set(ts, v);
+  }
 
   // Compute composite: (SPX × FEDFUNDS × CPIAUCSL) / (UNRATE² × M2SL)
   const composite: DataPoint[] = [];
@@ -246,6 +277,7 @@ export async function fetchAndCompute(): Promise<ChartPayload> {
       fedfunds: mapToSeries(fedfundsWeekly),
       dgs10: mapToSeries(dgs10Weekly),
       t10y2y: mapToSeries(t10y2yWeekly),
+      btc: mapToSeries(btcWeekly),
     },
     lastUpdated: Math.floor(Date.now() / 1000),
   };
