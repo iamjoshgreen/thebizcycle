@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useImperativeHandle, forwardRef } from "react";
 import {
   createChart,
   LineSeries,
@@ -46,11 +46,24 @@ export const OVERLAY_CONFIG: {
   { id: "t10y2y",   label: "Yield Curve",     color: "#EF4444", description: "10Y–2Y spread (negative = inverted)" },
 ];
 
+export interface ChartHandle {
+  fitContent: () => void;
+}
+
 interface ChartProps {
   composite: DataPoint[];
   recessions: RecessionInterval[];
   overlays: Overlays;
   activeOverlays: Set<keyof Overlays>;
+  measureActive: boolean;
+  onMeasure: (result: MeasureResult | null) => void;
+}
+
+export interface MeasureResult {
+  startTs: number;
+  endTs: number;
+  days: number;
+  years: number;
 }
 
 // ─── Recession Bars Primitive ─────────────────────────────────────────────────
@@ -94,12 +107,25 @@ class RecessionBarsPrimitive {
 
 // ─── Chart Component ──────────────────────────────────────────────────────────
 
-export default function Chart({ composite, recessions, overlays, activeOverlays }: ChartProps) {
+const Chart = forwardRef<ChartHandle, ChartProps>(function Chart(
+  { composite, recessions, overlays, activeOverlays, measureActive, onMeasure },
+  ref
+) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const compositeSeries = useRef<ISeriesApi<"Line"> | null>(null);
   const primitiveRef = useRef<RecessionBarsPrimitive | null>(null);
   const overlaySeries = useRef<Map<string, ISeriesApi<"Line">>>(new Map());
+  const measureStartRef = useRef<number | null>(null);
+  const measureActiveRef = useRef(measureActive);
+
+  useEffect(() => { measureActiveRef.current = measureActive; }, [measureActive]);
+
+  useImperativeHandle(ref, () => ({
+    fitContent() {
+      chartRef.current?.timeScale().fitContent();
+    },
+  }));
 
   // Initialize chart once
   useEffect(() => {
@@ -127,8 +153,8 @@ export default function Chart({ composite, recessions, overlays, activeOverlays 
         secondsVisible: false,
         ticksVisible: false,
         fixLeftEdge: true,
-        fixRightEdge: true,
-        rightOffset: 0,
+        fixRightEdge: false,
+        rightOffset: 2,
       },
       leftPriceScale: {
         visible: true,
@@ -137,7 +163,6 @@ export default function Chart({ composite, recessions, overlays, activeOverlays 
         textColor: "rgba(200, 200, 220, 0.35)",
         mode: 0,
       },
-      // Right scale starts hidden; SPX overlay will show/hide it
       rightPriceScale: {
         visible: false,
         borderColor: "rgba(255, 255, 255, 0.05)",
@@ -147,13 +172,12 @@ export default function Chart({ composite, recessions, overlays, activeOverlays 
       },
       width: containerRef.current.clientWidth,
       height: containerRef.current.clientHeight,
-      handleScale: false,
-      handleScroll: false,
+      handleScale: true,
+      handleScroll: true,
     });
 
     chartRef.current = chart;
 
-    // Composite is always visible on the left axis
     compositeSeries.current = chart.addSeries(LineSeries, {
       priceScaleId: "left",
       color: "#2962FF",
@@ -183,6 +207,49 @@ export default function Chart({ composite, recessions, overlays, activeOverlays 
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Handle measure clicks on the chart container
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const handleClick = (e: MouseEvent) => {
+      if (!measureActiveRef.current) return;
+      const chart = chartRef.current;
+      if (!chart) return;
+
+      const rect = el.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const time = chart.timeScale().coordinateToTime(x);
+      if (time == null) return;
+      const ts = time as unknown as number; // UTCTimestamp in seconds
+
+      if (measureStartRef.current == null) {
+        // First click — set start
+        measureStartRef.current = ts;
+        onMeasure(null); // clear any old result while waiting for 2nd click
+      } else {
+        // Second click — compute result
+        const startTs = measureStartRef.current;
+        const endTs = ts;
+        const diff = Math.abs(endTs - startTs);
+        const days = Math.round(diff / 86400);
+        const years = diff / (86400 * 365.25);
+        onMeasure({ startTs: Math.min(startTs, endTs), endTs: Math.max(startTs, endTs), days, years });
+        measureStartRef.current = null; // reset for next pair
+      }
+    };
+
+    el.addEventListener("click", handleClick);
+    return () => el.removeEventListener("click", handleClick);
+  }, [onMeasure]);
+
+  // Clear measure state when tool is turned off
+  useEffect(() => {
+    if (!measureActive) {
+      measureStartRef.current = null;
+    }
+  }, [measureActive]);
+
   // Update composite data + recession bars
   useEffect(() => {
     if (!compositeSeries.current || !chartRef.current) return;
@@ -200,7 +267,7 @@ export default function Chart({ composite, recessions, overlays, activeOverlays 
     chartRef.current.timeScale().fitContent();
   }, [composite, recessions]);
 
-  // Add/remove overlay series when activeOverlays or overlay data changes
+  // Add/remove overlay series
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
@@ -214,7 +281,7 @@ export default function Chart({ composite, recessions, overlays, activeOverlays 
         const series = chart.addSeries(LineSeries, {
           priceScaleId: scaleId,
           color: cfg.color,
-          lineWidth: cfg.id === "spx" ? 1 : 1,
+          lineWidth: 1,
           crosshairMarkerVisible: true,
           crosshairMarkerRadius: 3,
           crosshairMarkerBackgroundColor: cfg.color,
@@ -222,13 +289,10 @@ export default function Chart({ composite, recessions, overlays, activeOverlays 
           lastValueVisible: true,
           priceLineVisible: false,
         });
-
-        // Configure the scale for this overlay
         chart.priceScale(scaleId).applyOptions({
           visible: cfg.scaleVisible ?? false,
           ...(cfg.scaleMode !== undefined ? { mode: cfg.scaleMode } : {}),
         });
-
         const data = overlays[cfg.id];
         if (data?.length) {
           series.setData(data.map((d) => ({ time: d.time as UTCTimestamp, value: d.value })));
@@ -236,10 +300,7 @@ export default function Chart({ composite, recessions, overlays, activeOverlays 
         overlaySeries.current.set(cfg.id, series);
       } else if (!isActive && existing) {
         try { chart.removeSeries(existing); } catch { /* ok */ }
-        // Hide scale when series is removed
-        if (cfg.scaleVisible) {
-          chart.priceScale(scaleId).applyOptions({ visible: false });
-        }
+        if (cfg.scaleVisible) chart.priceScale(scaleId).applyOptions({ visible: false });
         overlaySeries.current.delete(cfg.id);
       } else if (isActive && existing) {
         const data = overlays[cfg.id];
@@ -254,8 +315,13 @@ export default function Chart({ composite, recessions, overlays, activeOverlays 
     <div
       ref={containerRef}
       className="w-full h-full"
-      style={{ background: "#0A0A0D" }}
+      style={{
+        background: "#0A0A0D",
+        cursor: measureActive ? "crosshair" : "default",
+      }}
       data-testid="chart-container"
     />
   );
-}
+});
+
+export default Chart;
