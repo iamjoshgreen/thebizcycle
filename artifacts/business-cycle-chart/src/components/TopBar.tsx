@@ -1,10 +1,16 @@
 import { RefreshCw } from "lucide-react";
+import { Link, useLocation } from "wouter";
 
 interface TopBarProps {
   lastUpdated: number | null;
   isRefreshing: boolean;
   onRefresh: () => void;
 }
+
+const TABS: { path: string; label: string }[] = [
+  { path: "/", label: "Business Cycle Chart" },
+  { path: "/fractal", label: "Fractal Overlay" },
+];
 
 function formatTimestamp(unix: number): string {
   const d = new Date(unix * 1000);
@@ -17,6 +23,37 @@ function formatTimestamp(unix: number): string {
   });
 }
 
+function Tabs() {
+  const [location] = useLocation();
+  return (
+    <div className="flex items-center gap-1">
+      <div
+        className="w-2 h-2 rounded-full mr-2.5"
+        style={{ background: "hsl(224 100% 58%)" }}
+      />
+      {TABS.map((tab) => {
+        const active = location === tab.path;
+        return (
+          <Link
+            key={tab.path}
+            href={tab.path}
+            className="px-2.5 py-1 rounded text-sm font-semibold tracking-tight transition-colors"
+            style={{
+              color: active ? "hsl(220 14% 95%)" : "hsl(220 10% 45%)",
+              background: active ? "hsl(230 12% 14%)" : "transparent",
+              fontFamily: "'Inter', sans-serif",
+              letterSpacing: "-0.01em",
+            }}
+            data-testid={`tab-${tab.path === "/" ? "home" : tab.path.slice(1)}`}
+          >
+            {tab.label}
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function TopBar({ lastUpdated, isRefreshing, onRefresh }: TopBarProps) {
   return (
     <header
@@ -27,24 +64,8 @@ export default function TopBar({ lastUpdated, isRefreshing, onRefresh }: TopBarP
       }}
       data-testid="topbar"
     >
-      {/* Left — title */}
-      <div className="flex items-center gap-2.5">
-        <div
-          className="w-2 h-2 rounded-full"
-          style={{ background: "hsl(224 100% 58%)" }}
-        />
-        <span
-          className="text-sm font-semibold tracking-tight"
-          style={{
-            color: "hsl(220 14% 90%)",
-            letterSpacing: "-0.01em",
-            fontFamily: "'Inter', sans-serif",
-          }}
-          data-testid="app-title"
-        >
-          Business Cycle Chart
-        </span>
-      </div>
+      {/* Left — title + tabs */}
+      <Tabs />
 
       {/* Center — last updated */}
       <div className="absolute left-1/2 -translate-x-1/2">

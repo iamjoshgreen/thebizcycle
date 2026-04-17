@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import ChartPage from "@/pages/ChartPage";
+import FractalPage from "@/pages/FractalPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -17,6 +18,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={ChartPage} />
+      <Route path="/fractal" component={FractalPage} />
     </Switch>
   );
 }

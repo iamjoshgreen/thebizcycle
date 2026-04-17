@@ -28,6 +28,7 @@ interface Overlays {
 export interface ChartPayload {
   composite: DataPoint[];
   spx: DataPoint[];
+  spxM2: DataPoint[];
   recessions: RecessionInterval[];
   overlays: Overlays;
   lastUpdated: number;
@@ -182,7 +183,7 @@ export async function fetchAndCompute(): Promise<ChartPayload> {
   logger.info("Fetching FRED data...");
 
   // Fetch all series in parallel
-  const [unrateMap, fedfundsMap, cpiauscslMap, m2slMap, usrecMap, oilMap, dgs10Map, t10y2yMap] =
+  const [unrateMap, fedfundsMap, cpiauscslMap, m2slMap, usrecMap, oilMap, dgs10Map, t10y2yMap, wm2nsMap] =
     await Promise.all([
       fetchFredMonthly("UNRATE"),
       fetchFredMonthly("FEDFUNDS"),
@@ -192,6 +193,7 @@ export async function fetchAndCompute(): Promise<ChartPayload> {
       fetchFredWeekly("DCOILWTICO"),
       fetchFredWeekly("DGS10"),
       fetchFredWeekly("T10Y2Y"),
+      fetchFredWeekly("WM2NS"),
     ]);
 
   logger.info("FRED data fetched, computing composite...");
@@ -213,6 +215,7 @@ export async function fetchAndCompute(): Promise<ChartPayload> {
   const oilWeekly = forwardFill(oilMap, fridays);
   const dgs10Weekly = forwardFill(dgs10Map, fridays);
   const t10y2yWeekly = forwardFill(t10y2yMap, fridays);
+  const wm2nsWeekly = forwardFill(wm2nsMap, fridays);
   // BTC: convert map to a date-string map then forward-fill onto the Friday grid
   const btcDateMap = new Map<string, number>();
   for (const [ts, v] of btcMap.entries()) {
@@ -222,8 +225,10 @@ export async function fetchAndCompute(): Promise<ChartPayload> {
   const btcWeekly = forwardFill(btcDateMap, fridays);
 
   // Compute composite: (SPX × FEDFUNDS × CPIAUCSL) / (UNRATE² × M2SL)
+  // and SPX/WM2NS (M2-normalized SPX, mirrors SPX/WM2NS on TradingView)
   const composite: DataPoint[] = [];
   const spxSeries: DataPoint[] = [];
+  const spxM2Series: DataPoint[] = [];
 
   for (const friday of fridays) {
     const ts = toUnix(friday);
@@ -240,6 +245,12 @@ export async function fetchAndCompute(): Promise<ChartPayload> {
 
     composite.push({ time: ts, value: (spx * fedfunds * cpiaucsl) / denom });
     spxSeries.push({ time: ts, value: spx });
+
+    // SPX / WM2NS (only when WM2NS is available — starts ~1980)
+    const wm2ns = wm2nsWeekly.get(ts);
+    if (wm2ns != null && wm2ns > 0) {
+      spxM2Series.push({ time: ts, value: spx / wm2ns });
+    }
   }
 
   logger.info(`Composite computed: ${composite.length} data points`);
@@ -270,6 +281,7 @@ export async function fetchAndCompute(): Promise<ChartPayload> {
   return {
     composite,
     spx: spxSeries,
+    spxM2: spxM2Series,
     recessions,
     overlays: {
       oil: mapToSeries(oilWeekly),
