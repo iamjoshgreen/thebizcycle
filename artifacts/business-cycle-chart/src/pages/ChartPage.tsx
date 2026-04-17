@@ -213,7 +213,7 @@ export default function ChartPage() {
               <div className="w-4 h-px" style={{ background: "#2962FF" }} />
               <span style={{ color: "rgba(200,200,220,0.7)", fontFamily: "'Inter', sans-serif", fontSize: "10px" }}>Composite</span>
             </div>
-            {OVERLAY_CONFIG.filter((c) => activeOverlays.has(c.id)).map((c) => (
+            {OVERLAY_CONFIG.filter((c) => c.id !== "spx" && activeOverlays.has(c.id)).map((c) => (
               <div key={c.id} className="flex items-center gap-1.5">
                 <div className="w-4 h-px" style={{ background: c.color }} />
                 <span style={{ color: "rgba(200,200,220,0.7)", fontFamily: "'Inter', sans-serif", fontSize: "10px" }}>{c.label}</span>
