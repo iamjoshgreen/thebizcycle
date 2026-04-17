@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "Business Cycle Chart"
+version = "1.0.0"
+id = "artifacts/business-cycle-chart"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18961
+
+[services.development]
+run = "pnpm --filter @workspace/business-cycle-chart run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/business-cycle-chart", "run", "build" ]
+publicDir = "artifacts/business-cycle-chart/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18961"
+BASE_PATH = "/"

@@ -3,13 +3,17 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Business Cycle Chart API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: chart
+    description: Chart data operations
+  - name: drawings
+    description: Drawing persistence operations
 paths:
   /healthz:
     get:
@@ -24,6 +28,67 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /chart:
+    get:
+      operationId: getChart
+      tags: [chart]
+      summary: Get chart data
+      description: Returns composite, SPX, recessions, and lastUpdated timestamp
+      responses:
+        "200":
+          description: Chart payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChartPayload"
+
+  /refresh:
+    post:
+      operationId: refreshChart
+      tags: [chart]
+      summary: Force refresh chart data
+      description: Re-fetches from Yahoo and FRED, recomputes everything, returns new chart payload
+      responses:
+        "200":
+          description: Refreshed chart payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChartPayload"
+
+  /drawings:
+    get:
+      operationId: getDrawings
+      tags: [drawings]
+      summary: Get saved drawings
+      description: Returns the serialized drawing plugin JSON
+      responses:
+        "200":
+          description: Drawings data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DrawingsPayload"
+    post:
+      operationId: saveDrawings
+      tags: [drawings]
+      summary: Save drawings
+      description: Persists the drawing plugin's exported JSON
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveDrawingsRequest"
+      responses:
+        "200":
+          description: Saved successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DrawingsPayload"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +99,71 @@ components:
       required:
         - status
 
+    DataPoint:
+      type: object
+      properties:
+        time:
+          type: number
+          description: Unix timestamp in seconds (Friday close)
+        value:
+          type: number
+      required:
+        - time
+        - value
+
+    RecessionInterval:
+      type: object
+      properties:
+        start:
+          type: number
+          description: Unix timestamp in seconds
+        end:
+          type: number
+          description: Unix timestamp in seconds
+      required:
+        - start
+        - end
+
+    ChartPayload:
+      type: object
+      properties:
+        composite:
+          type: array
+          items:
+            $ref: "#/components/schemas/DataPoint"
+        spx:
+          type: array
+          items:
+            $ref: "#/components/schemas/DataPoint"
+        recessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecessionInterval"
+        lastUpdated:
+          type: number
+          description: Unix timestamp in seconds when cache was populated
+      required:
+        - composite
+        - spx
+        - recessions
+        - lastUpdated
+
+    DrawingsPayload:
+      type: object
+      properties:
+        data:
+          description: Drawing plugin JSON (any structure)
+        updatedAt:
+          type: number
+          description: Unix timestamp in seconds
+      required:
+        - data
+        - updatedAt
+
+    SaveDrawingsRequest:
+      type: object
+      properties:
+        data:
+          description: Drawing plugin JSON (any structure)
+      required:
+        - data
