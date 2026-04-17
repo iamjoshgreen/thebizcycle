@@ -16,7 +16,7 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
- * Returns composite, SPX, recessions, and lastUpdated timestamp
+ * Returns composite, SPX, recessions, overlays, and lastUpdated timestamp
  * @summary Get chart data
  */
 export const GetChartResponse = zod.object({
@@ -38,6 +38,38 @@ export const GetChartResponse = zod.object({
       end: zod.number().describe("Unix timestamp in seconds"),
     }),
   ),
+  overlays: zod.object({
+    oil: zod.array(
+      zod.object({
+        time: zod.number().describe("Unix timestamp in seconds (Friday close)"),
+        value: zod.number(),
+      }),
+    ),
+    unrate: zod.array(
+      zod.object({
+        time: zod.number().describe("Unix timestamp in seconds (Friday close)"),
+        value: zod.number(),
+      }),
+    ),
+    fedfunds: zod.array(
+      zod.object({
+        time: zod.number().describe("Unix timestamp in seconds (Friday close)"),
+        value: zod.number(),
+      }),
+    ),
+    dgs10: zod.array(
+      zod.object({
+        time: zod.number().describe("Unix timestamp in seconds (Friday close)"),
+        value: zod.number(),
+      }),
+    ),
+    t10y2y: zod.array(
+      zod.object({
+        time: zod.number().describe("Unix timestamp in seconds (Friday close)"),
+        value: zod.number(),
+      }),
+    ),
+  }),
   lastUpdated: zod
     .number()
     .describe("Unix timestamp in seconds when cache was populated"),
@@ -66,29 +98,39 @@ export const RefreshChartResponse = zod.object({
       end: zod.number().describe("Unix timestamp in seconds"),
     }),
   ),
+  overlays: zod.object({
+    oil: zod.array(
+      zod.object({
+        time: zod.number().describe("Unix timestamp in seconds (Friday close)"),
+        value: zod.number(),
+      }),
+    ),
+    unrate: zod.array(
+      zod.object({
+        time: zod.number().describe("Unix timestamp in seconds (Friday close)"),
+        value: zod.number(),
+      }),
+    ),
+    fedfunds: zod.array(
+      zod.object({
+        time: zod.number().describe("Unix timestamp in seconds (Friday close)"),
+        value: zod.number(),
+      }),
+    ),
+    dgs10: zod.array(
+      zod.object({
+        time: zod.number().describe("Unix timestamp in seconds (Friday close)"),
+        value: zod.number(),
+      }),
+    ),
+    t10y2y: zod.array(
+      zod.object({
+        time: zod.number().describe("Unix timestamp in seconds (Friday close)"),
+        value: zod.number(),
+      }),
+    ),
+  }),
   lastUpdated: zod
     .number()
     .describe("Unix timestamp in seconds when cache was populated"),
-});
-
-/**
- * Returns the serialized drawing plugin JSON
- * @summary Get saved drawings
- */
-export const GetDrawingsResponse = zod.object({
-  data: zod.unknown().describe("Drawing plugin JSON (any structure)"),
-  updatedAt: zod.number().describe("Unix timestamp in seconds"),
-});
-
-/**
- * Persists the drawing plugin's exported JSON
- * @summary Save drawings
- */
-export const SaveDrawingsBody = zod.object({
-  data: zod.unknown().describe("Drawing plugin JSON (any structure)"),
-});
-
-export const SaveDrawingsResponse = zod.object({
-  data: zod.unknown().describe("Drawing plugin JSON (any structure)"),
-  updatedAt: zod.number().describe("Unix timestamp in seconds"),
 });

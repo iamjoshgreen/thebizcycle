@@ -12,8 +12,6 @@ tags:
     description: Health operations
   - name: chart
     description: Chart data operations
-  - name: drawings
-    description: Drawing persistence operations
 paths:
   /healthz:
     get:
@@ -34,7 +32,7 @@ paths:
       operationId: getChart
       tags: [chart]
       summary: Get chart data
-      description: Returns composite, SPX, recessions, and lastUpdated timestamp
+      description: Returns composite, SPX, recessions, overlays, and lastUpdated timestamp
       responses:
         "200":
           description: Chart payload
@@ -56,38 +54,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ChartPayload"
-
-  /drawings:
-    get:
-      operationId: getDrawings
-      tags: [drawings]
-      summary: Get saved drawings
-      description: Returns the serialized drawing plugin JSON
-      responses:
-        "200":
-          description: Drawings data
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DrawingsPayload"
-    post:
-      operationId: saveDrawings
-      tags: [drawings]
-      summary: Save drawings
-      description: Persists the drawing plugin's exported JSON
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SaveDrawingsRequest"
-      responses:
-        "200":
-          description: Saved successfully
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/DrawingsPayload"
 
 components:
   schemas:
@@ -139,6 +105,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RecessionInterval"
+        overlays:
+          $ref: "#/components/schemas/Overlays"
         lastUpdated:
           type: number
           description: Unix timestamp in seconds when cache was populated
@@ -146,24 +114,35 @@ components:
         - composite
         - spx
         - recessions
+        - overlays
         - lastUpdated
 
-    DrawingsPayload:
+    Overlays:
       type: object
       properties:
-        data:
-          description: Drawing plugin JSON (any structure)
-        updatedAt:
-          type: number
-          description: Unix timestamp in seconds
+        oil:
+          type: array
+          items:
+            $ref: "#/components/schemas/DataPoint"
+        unrate:
+          type: array
+          items:
+            $ref: "#/components/schemas/DataPoint"
+        fedfunds:
+          type: array
+          items:
+            $ref: "#/components/schemas/DataPoint"
+        dgs10:
+          type: array
+          items:
+            $ref: "#/components/schemas/DataPoint"
+        t10y2y:
+          type: array
+          items:
+            $ref: "#/components/schemas/DataPoint"
       required:
-        - data
-        - updatedAt
-
-    SaveDrawingsRequest:
-      type: object
-      properties:
-        data:
-          description: Drawing plugin JSON (any structure)
-      required:
-        - data
+        - oil
+        - unrate
+        - fedfunds
+        - dgs10
+        - t10y2y

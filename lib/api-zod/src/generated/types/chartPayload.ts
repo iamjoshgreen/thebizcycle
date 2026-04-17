@@ -6,12 +6,14 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { DataPoint } from "./dataPoint";
+import type { Overlays } from "./overlays";
 import type { RecessionInterval } from "./recessionInterval";
 
 export interface ChartPayload {
   composite: DataPoint[];
   spx: DataPoint[];
   recessions: RecessionInterval[];
+  overlays: Overlays;
   /** Unix timestamp in seconds when cache was populated */
   lastUpdated: number;
 }

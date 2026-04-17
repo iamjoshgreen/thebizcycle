@@ -16,15 +16,10 @@ import type {
   UseQueryResult,
 } from "@tanstack/react-query";
 
-import type {
-  ChartPayload,
-  DrawingsPayload,
-  HealthStatus,
-  SaveDrawingsRequest,
-} from "./api.schemas";
+import type { ChartPayload, HealthStatus } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
-import type { ErrorType, BodyType } from "../custom-fetch";
+import type { ErrorType } from "../custom-fetch";
 
 type AwaitedInput<T> = PromiseLike<T> | T;
 
@@ -109,7 +104,7 @@ export function useHealthCheck<
 }
 
 /**
- * Returns composite, SPX, recessions, and lastUpdated timestamp
+ * Returns composite, SPX, recessions, overlays, and lastUpdated timestamp
  * @summary Get chart data
  */
 export const getGetChartUrl = () => {
@@ -256,167 +251,4 @@ export const useRefreshChart = <
   TContext
 > => {
   return useMutation(getRefreshChartMutationOptions(options));
-};
-
-/**
- * Returns the serialized drawing plugin JSON
- * @summary Get saved drawings
- */
-export const getGetDrawingsUrl = () => {
-  return `/api/drawings`;
-};
-
-export const getDrawings = async (
-  options?: RequestInit,
-): Promise<DrawingsPayload> => {
-  return customFetch<DrawingsPayload>(getGetDrawingsUrl(), {
-    ...options,
-    method: "GET",
-  });
-};
-
-export const getGetDrawingsQueryKey = () => {
-  return [`/api/drawings`] as const;
-};
-
-export const getGetDrawingsQueryOptions = <
-  TData = Awaited<ReturnType<typeof getDrawings>>,
-  TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getDrawings>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}) => {
-  const { query: queryOptions, request: requestOptions } = options ?? {};
-
-  const queryKey = queryOptions?.queryKey ?? getGetDrawingsQueryKey();
-
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDrawings>>> = ({
-    signal,
-  }) => getDrawings({ signal, ...requestOptions });
-
-  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
-    Awaited<ReturnType<typeof getDrawings>>,
-    TError,
-    TData
-  > & { queryKey: QueryKey };
-};
-
-export type GetDrawingsQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getDrawings>>
->;
-export type GetDrawingsQueryError = ErrorType<unknown>;
-
-/**
- * @summary Get saved drawings
- */
-
-export function useGetDrawings<
-  TData = Awaited<ReturnType<typeof getDrawings>>,
-  TError = ErrorType<unknown>,
->(options?: {
-  query?: UseQueryOptions<
-    Awaited<ReturnType<typeof getDrawings>>,
-    TError,
-    TData
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetDrawingsQueryOptions(options);
-
-  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
-    queryKey: QueryKey;
-  };
-
-  return { ...query, queryKey: queryOptions.queryKey };
-}
-
-/**
- * Persists the drawing plugin's exported JSON
- * @summary Save drawings
- */
-export const getSaveDrawingsUrl = () => {
-  return `/api/drawings`;
-};
-
-export const saveDrawings = async (
-  saveDrawingsRequest: SaveDrawingsRequest,
-  options?: RequestInit,
-): Promise<DrawingsPayload> => {
-  return customFetch<DrawingsPayload>(getSaveDrawingsUrl(), {
-    ...options,
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    body: JSON.stringify(saveDrawingsRequest),
-  });
-};
-
-export const getSaveDrawingsMutationOptions = <
-  TError = ErrorType<unknown>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof saveDrawings>>,
-    TError,
-    { data: BodyType<SaveDrawingsRequest> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationOptions<
-  Awaited<ReturnType<typeof saveDrawings>>,
-  TError,
-  { data: BodyType<SaveDrawingsRequest> },
-  TContext
-> => {
-  const mutationKey = ["saveDrawings"];
-  const { mutation: mutationOptions, request: requestOptions } = options
-    ? options.mutation &&
-      "mutationKey" in options.mutation &&
-      options.mutation.mutationKey
-      ? options
-      : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, request: undefined };
-
-  const mutationFn: MutationFunction<
-    Awaited<ReturnType<typeof saveDrawings>>,
-    { data: BodyType<SaveDrawingsRequest> }
-  > = (props) => {
-    const { data } = props ?? {};
-
-    return saveDrawings(data, requestOptions);
-  };
-
-  return { mutationFn, ...mutationOptions };
-};
-
-export type SaveDrawingsMutationResult = NonNullable<
-  Awaited<ReturnType<typeof saveDrawings>>
->;
-export type SaveDrawingsMutationBody = BodyType<SaveDrawingsRequest>;
-export type SaveDrawingsMutationError = ErrorType<unknown>;
-
-/**
- * @summary Save drawings
- */
-export const useSaveDrawings = <
-  TError = ErrorType<unknown>,
-  TContext = unknown,
->(options?: {
-  mutation?: UseMutationOptions<
-    Awaited<ReturnType<typeof saveDrawings>>,
-    TError,
-    { data: BodyType<SaveDrawingsRequest> },
-    TContext
-  >;
-  request?: SecondParameter<typeof customFetch>;
-}): UseMutationResult<
-  Awaited<ReturnType<typeof saveDrawings>>,
-  TError,
-  { data: BodyType<SaveDrawingsRequest> },
-  TContext
-> => {
-  return useMutation(getSaveDrawingsMutationOptions(options));
 };

@@ -8,7 +8,6 @@
 
 export * from "./chartPayload";
 export * from "./dataPoint";
-export * from "./drawingsPayload";
 export * from "./healthStatus";
+export * from "./overlays";
 export * from "./recessionInterval";
-export * from "./saveDrawingsRequest";

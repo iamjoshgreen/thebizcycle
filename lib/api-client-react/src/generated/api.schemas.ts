@@ -22,22 +22,19 @@ export interface RecessionInterval {
   end: number;
 }
 
+export interface Overlays {
+  oil: DataPoint[];
+  unrate: DataPoint[];
+  fedfunds: DataPoint[];
+  dgs10: DataPoint[];
+  t10y2y: DataPoint[];
+}
+
 export interface ChartPayload {
   composite: DataPoint[];
   spx: DataPoint[];
   recessions: RecessionInterval[];
+  overlays: Overlays;
   /** Unix timestamp in seconds when cache was populated */
   lastUpdated: number;
-}
-
-export interface DrawingsPayload {
-  /** Drawing plugin JSON (any structure) */
-  data: unknown;
-  /** Unix timestamp in seconds */
-  updatedAt: number;
-}
-
-export interface SaveDrawingsRequest {
-  /** Drawing plugin JSON (any structure) */
-  data: unknown;
 }
