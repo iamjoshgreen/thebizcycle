@@ -131,10 +131,8 @@ export default function Chart({ composite, spx, recessions }: ChartProps) {
         secondsVisible: false,
         ticksVisible: false,
         fixLeftEdge: true,
-        fixRightEdge: false,
-        barSpacing: 3,
-        minBarSpacing: 0.5,
-        rightOffset: 8,
+        fixRightEdge: true,
+        rightOffset: 0,
       },
       leftPriceScale: {
         visible: true,
@@ -148,12 +146,12 @@ export default function Chart({ composite, spx, recessions }: ChartProps) {
         borderColor: "rgba(255, 255, 255, 0.05)",
         scaleMargins: { top: 0.06, bottom: 0.06 },
         textColor: "rgba(200, 200, 220, 0.35)",
-        mode: 2,
+        mode: 1,
       },
       width: containerRef.current.clientWidth,
       height: containerRef.current.clientHeight,
-      handleScale: true,
-      handleScroll: true,
+      handleScale: false,
+      handleScroll: false,
     });
 
     chartRef.current = chart;
