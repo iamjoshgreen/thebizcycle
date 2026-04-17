@@ -1,4 +1,4 @@
-import { useEffect, useRef, useImperativeHandle, forwardRef } from "react";
+import { useEffect, useRef } from "react";
 import {
   createChart,
   LineSeries,
@@ -9,14 +9,6 @@ import {
   type UTCTimestamp,
   ColorType,
 } from "lightweight-charts";
-import {
-  DrawingManager,
-  TrendLine,
-  ParallelChannel,
-  type SerializedDrawing,
-  type IDrawing,
-} from "lightweight-charts-drawing";
-import type { DrawingTool } from "./DrawingToolbar";
 
 interface DataPoint {
   time: number;
@@ -32,14 +24,6 @@ interface ChartProps {
   composite: DataPoint[];
   spx: DataPoint[];
   recessions: RecessionInterval[];
-  activeTool: DrawingTool;
-  onDrawingsChange: (drawings: SerializedDrawing[]) => void;
-}
-
-export interface ChartHandle {
-  loadDrawings: (drawings: SerializedDrawing[]) => void;
-  deleteSelected: () => void;
-  clearAll: () => void;
 }
 
 // ─── Recession Bars Primitive ─────────────────────────────────────────────────
@@ -104,67 +88,12 @@ class RecessionBarsPrimitive {
 
 // ─── Chart Component ──────────────────────────────────────────────────────────
 
-const Chart = forwardRef<ChartHandle, ChartProps>(function Chart(
-  { composite, spx, recessions, activeTool, onDrawingsChange },
-  ref
-) {
+export default function Chart({ composite, spx, recessions }: ChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const compositeSeries = useRef<ISeriesApi<"Line"> | null>(null);
   const spxSeries = useRef<ISeriesApi<"Line"> | null>(null);
-  const drawingManagerRef = useRef<DrawingManager | null>(null);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const primitiveRef = useRef<RecessionBarsPrimitive | null>(null);
-
-  // Keep latest callback in a ref to avoid stale closures
-  const onDrawingsChangeRef = useRef(onDrawingsChange);
-  useEffect(() => { onDrawingsChangeRef.current = onDrawingsChange; }, [onDrawingsChange]);
-
-  const scheduleDrawingSave = useRef((manager: DrawingManager) => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      onDrawingsChangeRef.current(manager.exportDrawings());
-    }, 500);
-  }).current;
-
-  useImperativeHandle(ref, () => ({
-    loadDrawings(drawings: SerializedDrawing[]) {
-      const manager = drawingManagerRef.current;
-      if (!manager) return;
-      manager.importDrawings(drawings, (type: string, data: SerializedDrawing): IDrawing | null => {
-        try {
-          if (type === "trend-line") {
-            const d = new TrendLine(data.id);
-            d.fromJSON(data);
-            return d;
-          }
-          if (type === "parallel-channel") {
-            const d = new ParallelChannel(data.id);
-            d.fromJSON(data);
-            return d;
-          }
-        } catch {
-          return null;
-        }
-        return null;
-      });
-    },
-    deleteSelected() {
-      const manager = drawingManagerRef.current;
-      if (!manager) return;
-      const selected = manager.getSelectedDrawing();
-      if (selected) {
-        manager.removeDrawing(selected.id);
-        scheduleDrawingSave(manager);
-      }
-    },
-    clearAll() {
-      const manager = drawingManagerRef.current;
-      if (!manager) return;
-      manager.clearAll();
-      scheduleDrawingSave(manager);
-    },
-  }));
 
   // Initialize chart once
   useEffect(() => {
@@ -229,8 +158,7 @@ const Chart = forwardRef<ChartHandle, ChartProps>(function Chart(
 
     chartRef.current = chart;
 
-    // Composite — left axis, blue
-    const compSeries = chart.addSeries(LineSeries, {
+    compositeSeries.current = chart.addSeries(LineSeries, {
       priceScaleId: "left",
       color: "#2962FF",
       lineWidth: 1.5,
@@ -241,10 +169,8 @@ const Chart = forwardRef<ChartHandle, ChartProps>(function Chart(
       lastValueVisible: true,
       priceLineVisible: false,
     });
-    compositeSeries.current = compSeries;
 
-    // SPX — right axis, orange
-    const spxSer = chart.addSeries(LineSeries, {
+    spxSeries.current = chart.addSeries(LineSeries, {
       priceScaleId: "right",
       color: "#FF6D00",
       lineWidth: 1,
@@ -255,27 +181,6 @@ const Chart = forwardRef<ChartHandle, ChartProps>(function Chart(
       lastValueVisible: true,
       priceLineVisible: false,
     });
-    spxSeries.current = spxSer;
-
-    // Drawing manager — attach to composite series
-    const manager = new DrawingManager();
-    manager.attach(chart, compSeries, containerRef.current);
-    drawingManagerRef.current = manager;
-
-    const unsubCreate = manager.on("drawing:created", () => scheduleDrawingSave(manager));
-    const unsubUpdate = manager.on("drawing:updated", () => scheduleDrawingSave(manager));
-    const unsubDelete = manager.on("drawing:deleted", () => scheduleDrawingSave(manager));
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Delete" || e.key === "Backspace") {
-        const sel = manager.getSelectedDrawing();
-        if (sel) {
-          manager.removeDrawing(sel.id);
-          scheduleDrawingSave(manager);
-        }
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
 
     const ro = new ResizeObserver(() => {
       if (containerRef.current) {
@@ -285,34 +190,27 @@ const Chart = forwardRef<ChartHandle, ChartProps>(function Chart(
     ro.observe(containerRef.current);
 
     return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      unsubCreate();
-      unsubUpdate();
-      unsubDelete();
-      window.removeEventListener("keydown", handleKeyDown);
       ro.disconnect();
-      manager.detach();
       chart.remove();
       chartRef.current = null;
       compositeSeries.current = null;
       spxSeries.current = null;
-      drawingManagerRef.current = null;
       primitiveRef.current = null;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Update data
+  // Update data + recession bars whenever data changes
   useEffect(() => {
     if (!compositeSeries.current || !spxSeries.current || !chartRef.current) return;
     if (composite.length === 0) return;
 
-    const compData = composite.map((d) => ({ time: d.time as UTCTimestamp, value: d.value }));
-    const spxData = spx.map((d) => ({ time: d.time as UTCTimestamp, value: d.value }));
+    compositeSeries.current.setData(
+      composite.map((d) => ({ time: d.time as UTCTimestamp, value: d.value }))
+    );
+    spxSeries.current.setData(
+      spx.map((d) => ({ time: d.time as UTCTimestamp, value: d.value }))
+    );
 
-    compositeSeries.current.setData(compData);
-    spxSeries.current.setData(spxData);
-
-    // Detach old recession primitive
     if (primitiveRef.current) {
       try {
         compositeSeries.current.detachPrimitive(primitiveRef.current as never);
@@ -326,30 +224,12 @@ const Chart = forwardRef<ChartHandle, ChartProps>(function Chart(
     chartRef.current.timeScale().fitContent();
   }, [composite, spx, recessions]);
 
-  // Update active tool
-  useEffect(() => {
-    const manager = drawingManagerRef.current;
-    if (!manager) return;
-
-    const toolMap: Record<string, string | null> = {
-      trendline: "trend-line",
-      channel: "parallel-channel",
-      select: "select",
-    };
-    manager.setActiveTool(activeTool ? (toolMap[activeTool] ?? null) : null);
-  }, [activeTool]);
-
   return (
     <div
       ref={containerRef}
       className="w-full h-full"
-      style={{
-        background: "#0A0A0D",
-        cursor: activeTool && activeTool !== "select" ? "crosshair" : "default",
-      }}
+      style={{ background: "#0A0A0D" }}
       data-testid="chart-container"
     />
   );
-});
-
-export default Chart;
+}
