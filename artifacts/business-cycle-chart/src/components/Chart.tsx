@@ -56,7 +56,7 @@ class RecessionBarsRenderer implements IPrimitivePaneRenderer {
 
     target.useBitmapCoordinateSpace(({ context: ctx, bitmapSize, horizontalPixelRatio }) => {
       ctx.save();
-      ctx.fillStyle = "rgba(110, 110, 140, 0.13)";
+      ctx.fillStyle = "rgba(220, 100, 100, 0.22)";
 
       for (const { start, end } of this._recessions) {
         const x1 = ts.timeToCoordinate(start as UTCTimestamp);
