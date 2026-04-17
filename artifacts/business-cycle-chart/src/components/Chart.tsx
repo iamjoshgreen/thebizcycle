@@ -165,6 +165,7 @@ const Chart = forwardRef<ChartHandle, ChartProps>(function Chart(
         fixLeftEdge: true,
         fixRightEdge: false,
         rightOffset: 2,
+        minBarSpacing: 0.05,
       },
       leftPriceScale: {
         visible: true,
@@ -281,7 +282,11 @@ const Chart = forwardRef<ChartHandle, ChartProps>(function Chart(
     primitiveRef.current = prim;
     compositeSeries.current.attachPrimitive(prim as never);
 
-    chartRef.current.timeScale().fitContent();
+    // Always fit to the composite's full range, not whatever overlays constrain it to
+    chartRef.current.timeScale().setVisibleRange({
+      from: composite[0].time as UTCTimestamp,
+      to: composite[composite.length - 1].time as UTCTimestamp,
+    });
   }, [composite, recessions]);
 
   // Add/remove overlay series
