@@ -122,13 +122,14 @@ function mapToSeries(m: Map<number, number>): DataPoint[] {
 export async function fetchAndCompute(): Promise<ChartPayload> {
   logger.info("Fetching Yahoo Finance SPX data...");
 
-  const endDate = getPreviousFriday(new Date());
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   const startDate = new Date("1959-01-02");
 
-  // Fetch SPX weekly from Yahoo Finance
+  // Include the current partial week so the latest close is always visible
   const spxResult = await yahooFinance.chart("^GSPC", {
     period1: "1959-01-01",
-    period2: endDate.toISOString().slice(0, 10),
+    period2: today.toISOString().slice(0, 10),
     interval: "1wk",
   });
 
@@ -136,13 +137,19 @@ export async function fetchAndCompute(): Promise<ChartPayload> {
   if (spxResult.quotes) {
     for (const q of spxResult.quotes) {
       if (q.date && q.close != null) {
-        const d = new Date(q.date);
-        d.setHours(0, 0, 0, 0);
+        const barDate = new Date(q.date);
+        barDate.setHours(0, 0, 0, 0);
+
+        // Advance Yahoo's Monday bar date to the Friday of that week,
+        // but never past today (keeps current partial week grounded)
+        const d = new Date(barDate);
         const dow = d.getDay();
         if (dow !== 5) {
           d.setDate(d.getDate() + (dow === 0 ? 5 : 5 - dow));
         }
-        spxMap.set(toUnix(d), q.close);
+        // If the computed Friday is in the future, anchor to today
+        const ts = d > today ? toUnix(today) : toUnix(d);
+        spxMap.set(ts, q.close);
       }
     }
   }
@@ -165,7 +172,11 @@ export async function fetchAndCompute(): Promise<ChartPayload> {
 
   logger.info("FRED data fetched, computing composite...");
 
-  const fridays = getFridays(startDate, endDate);
+  const fridays = getFridays(startDate, today);
+  // Include today if it's not a Friday so the current partial week shows up
+  if (today.getDay() !== 5) {
+    fridays.push(new Date(today));
+  }
 
   // Forward-fill monthly series to weekly grid
   const unrateWeekly = forwardFill(unrateMap, fridays);
@@ -220,7 +231,7 @@ export async function fetchAndCompute(): Promise<ChartPayload> {
     }
   }
   if (inRecession && recStart > 0) {
-    recessions.push({ start: recStart, end: toUnix(endDate) });
+    recessions.push({ start: recStart, end: toUnix(today) });
   }
 
   logger.info(`Found ${recessions.length} recession intervals`);
