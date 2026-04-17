@@ -4,13 +4,15 @@ import TopBar from "@/components/TopBar";
 import Chart, { OVERLAY_CONFIG, type Overlays } from "@/components/Chart";
 import { useToast } from "@/hooks/use-toast";
 
-const EMPTY_OVERLAYS: Overlays = { oil: [], unrate: [], fedfunds: [], dgs10: [], t10y2y: [] };
+const EMPTY_OVERLAYS: Overlays = { spx: [], oil: [], unrate: [], fedfunds: [], dgs10: [], t10y2y: [] };
 
 export default function ChartPage() {
   const { toast } = useToast();
   const { data: chartData, isLoading } = useGetChart();
   const refreshMutation = useRefreshChart();
-  const [activeOverlays, setActiveOverlays] = useState<Set<keyof Overlays>>(new Set());
+
+  // SPX is on by default
+  const [activeOverlays, setActiveOverlays] = useState<Set<keyof Overlays>>(new Set(["spx"]));
 
   const handleRefresh = useCallback(() => {
     refreshMutation.mutate(undefined, {
@@ -31,10 +33,14 @@ export default function ChartPage() {
 
   const payload = refreshMutation.data ?? chartData;
   const composite = payload?.composite ?? [];
-  const spxData = payload?.spx ?? [];
   const recessions = payload?.recessions ?? [];
-  const overlays = (payload?.overlays as Overlays | undefined) ?? EMPTY_OVERLAYS;
   const lastUpdated = payload?.lastUpdated ?? null;
+
+  // Merge SPX into overlays so it can be toggled like the rest
+  const overlays: Overlays = {
+    spx: payload?.spx ?? [],
+    ...((payload?.overlays as Overlays | undefined) ?? {}),
+  };
 
   return (
     <div className="flex flex-col w-full h-full overflow-hidden" style={{ background: "#0A0A0D" }}>
@@ -117,10 +123,6 @@ export default function ChartPage() {
               <div className="w-4 h-px" style={{ background: "#2962FF" }} />
               <span style={{ color: "rgba(200,200,220,0.7)", fontFamily: "'Inter', sans-serif", fontSize: "10px" }}>Composite</span>
             </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-4 h-px" style={{ background: "#FF6D00" }} />
-              <span style={{ color: "rgba(200,200,220,0.7)", fontFamily: "'Inter', sans-serif", fontSize: "10px" }}>SPX</span>
-            </div>
             {OVERLAY_CONFIG.filter((c) => activeOverlays.has(c.id)).map((c) => (
               <div key={c.id} className="flex items-center gap-1.5">
                 <div className="w-4 h-px" style={{ background: c.color }} />
@@ -136,7 +138,6 @@ export default function ChartPage() {
 
         <Chart
           composite={composite}
-          spx={spxData}
           recessions={recessions}
           overlays={overlays}
           activeOverlays={activeOverlays}
