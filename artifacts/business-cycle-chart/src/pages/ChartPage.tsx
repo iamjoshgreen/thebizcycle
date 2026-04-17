@@ -124,6 +124,18 @@ export default function ChartPage() {
                 SPX
               </span>
             </div>
+            <div className="flex items-center gap-1.5">
+              <div
+                className="w-3 rounded-sm"
+                style={{ height: "10px", background: "rgba(180, 190, 210, 0.45)", border: "1px solid rgba(180, 190, 210, 0.35)" }}
+              />
+              <span
+                className="text-xs"
+                style={{ color: "rgba(200, 200, 220, 0.7)", fontFamily: "'Inter', sans-serif", fontSize: "10px" }}
+              >
+                Recession
+              </span>
+            </div>
           </div>
         )}
 
