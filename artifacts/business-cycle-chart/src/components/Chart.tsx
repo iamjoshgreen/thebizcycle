@@ -118,12 +118,22 @@ const Chart = forwardRef<ChartHandle, ChartProps>(function Chart(
   const overlaySeries = useRef<Map<string, ISeriesApi<"Line">>>(new Map());
   const measureStartRef = useRef<number | null>(null);
   const measureActiveRef = useRef(measureActive);
+  const compositeRangeRef = useRef<{ from: number; to: number } | null>(null);
 
   useEffect(() => { measureActiveRef.current = measureActive; }, [measureActive]);
 
   useImperativeHandle(ref, () => ({
     fitContent() {
-      chartRef.current?.timeScale().fitContent();
+      const ts = chartRef.current?.timeScale();
+      if (!ts) return;
+      if (compositeRangeRef.current) {
+        ts.setVisibleRange({
+          from: compositeRangeRef.current.from as UTCTimestamp,
+          to: compositeRangeRef.current.to as UTCTimestamp,
+        });
+      } else {
+        ts.fitContent();
+      }
     },
   }));
 
@@ -255,7 +265,14 @@ const Chart = forwardRef<ChartHandle, ChartProps>(function Chart(
     if (!compositeSeries.current || !chartRef.current) return;
     if (composite.length === 0) return;
 
-    compositeSeries.current.setData(composite.map((d) => ({ time: d.time as UTCTimestamp, value: d.value })));
+    const mapped = composite.map((d) => ({ time: d.time as UTCTimestamp, value: d.value }));
+    compositeSeries.current.setData(mapped);
+
+    // Store the full composite date range so Fit All can always reset to it
+    compositeRangeRef.current = {
+      from: composite[0].time,
+      to: composite[composite.length - 1].time,
+    };
 
     if (primitiveRef.current) {
       try { compositeSeries.current.detachPrimitive(primitiveRef.current as never); } catch { /* ok */ }
