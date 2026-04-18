@@ -10,6 +10,7 @@ interface TopBarProps {
 const TABS: { path: string; label: string }[] = [
   { path: "/", label: "Business Cycle Chart" },
   { path: "/fractal", label: "Fractal Overlay" },
+  { path: "/channel", label: "Channel" },
 ];
 
 function formatTimestamp(unix: number): string {
