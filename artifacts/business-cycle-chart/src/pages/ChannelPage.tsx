@@ -5,9 +5,11 @@ import {
   createChart,
   LineSeries,
   type IChartApi,
+  type IPriceLine,
   type IPrimitivePaneRenderer,
   type IPrimitivePaneView,
   type ISeriesApi,
+  type MouseEventParams,
   type UTCTimestamp,
 } from "lightweight-charts";
 import TopBar from "@/components/TopBar";
@@ -28,6 +30,14 @@ function isoToUnix(iso: string): number {
 
 function clampPositive(n: number, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function formatDateLabel(ts: number): string {
+  return new Date(ts * 1000).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 // ─── Channel Band Primitive (shaded fill between upper + lower lines) ────────
@@ -158,6 +168,15 @@ export default function ChannelPage() {
   const [bDate, setBDate] = useState(DEFAULT_B_DATE);
   const [bPrice, setBPrice] = useState(String(DEFAULT_B_PRICE));
   const [height, setHeight] = useState(String(DEFAULT_HEIGHT));
+
+  // --- Measure tool state ---
+  type MeasurePoint = { time: number; price: number };
+  const [measureMode, setMeasureMode] = useState(false);
+  const [measurement, setMeasurement] = useState<{
+    a: MeasurePoint | null;
+    b: MeasurePoint | null;
+  }>({ a: null, b: null });
+  const priceLinesRef = useRef<IPriceLine[]>([]);
 
   const payload = refreshMutation.data ?? chartData;
   const spx = payload?.spx ?? [];
@@ -379,6 +398,101 @@ export default function ChannelPage() {
     });
   }, [spx, math]);
 
+  // --- Measure tool: subscribe to chart clicks while measureMode is on ---
+  useEffect(() => {
+    const chart = chartRef.current;
+    const spxSeries = spxSeriesRef.current;
+    if (!chart || !spxSeries || !measureMode) return;
+
+    const handler = (param: MouseEventParams) => {
+      if (!param.point || param.time == null) return;
+      const price = spxSeries.coordinateToPrice(param.point.y);
+      if (price == null || !isFinite(price)) return;
+      const time = typeof param.time === "number" ? param.time : Number(param.time);
+      if (!Number.isFinite(time)) return;
+      const newPt: MeasurePoint = { time, price };
+      setMeasurement((curr) => {
+        if (!curr.a) return { a: newPt, b: null };
+        if (!curr.b) return { a: curr.a, b: newPt };
+        return { a: newPt, b: null };
+      });
+    };
+    chart.subscribeClick(handler);
+    return () => chart.unsubscribeClick(handler);
+  }, [measureMode]);
+
+  // --- Measure tool: manage horizontal price lines at A and B ---
+  useEffect(() => {
+    const series = spxSeriesRef.current;
+    if (!series) return;
+    const lines: IPriceLine[] = [];
+    if (measurement.a) {
+      lines.push(
+        series.createPriceLine({
+          price: measurement.a.price,
+          color: "rgba(251,191,36,0.85)",
+          lineWidth: 1,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: "A",
+        }),
+      );
+    }
+    if (measurement.b) {
+      lines.push(
+        series.createPriceLine({
+          price: measurement.b.price,
+          color: "rgba(251,191,36,0.85)",
+          lineWidth: 1,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: "B",
+        }),
+      );
+    }
+    priceLinesRef.current = lines;
+    return () => {
+      lines.forEach((pl) => {
+        try {
+          series.removePriceLine(pl);
+        } catch {
+          /* series may already be destroyed */
+        }
+      });
+      priceLinesRef.current = [];
+    };
+  }, [measurement.a?.price, measurement.b?.price]);
+
+  // --- Measure tool: Esc clears + exits ---
+  useEffect(() => {
+    if (!measureMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setMeasureMode(false);
+        setMeasurement({ a: null, b: null });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [measureMode]);
+
+  // --- Derived measurement readout ---
+  const readout = (() => {
+    const { a, b } = measurement;
+    if (!a || !b) return null;
+    const t1 = Math.min(a.time, b.time);
+    const t2 = Math.max(a.time, b.time);
+    const p1 = a.time <= b.time ? a.price : b.price;
+    const p2 = a.time <= b.time ? b.price : a.price;
+    const days = Math.round((t2 - t1) / 86400);
+    const weeks = (days / 7).toFixed(1);
+    const months = (days / 30.44).toFixed(1);
+    const years = (days / 365.25).toFixed(2);
+    const dPrice = p2 - p1;
+    const pct = p1 !== 0 ? (dPrice / p1) * 100 : 0;
+    return { t1, t2, p1, p2, days, weeks, months, years, dPrice, pct };
+  })();
+
   const inputStyle: React.CSSProperties = {
     background: "hsl(230 12% 12%)",
     color: "rgba(200,200,220,0.85)",
@@ -499,6 +613,47 @@ export default function ChannelPage() {
         >
           Reset
         </button>
+
+        <div style={{ width: "1px", height: "18px", background: "hsl(230 10% 16%)" }} />
+
+        <button
+          onClick={() => {
+            if (measureMode) {
+              setMeasureMode(false);
+              setMeasurement({ a: null, b: null });
+            } else {
+              setMeasureMode(true);
+              setMeasurement({ a: null, b: null });
+            }
+          }}
+          title={
+            measureMode
+              ? "Exit measure mode (Esc)"
+              : "Click two points on the chart to measure time + price change"
+          }
+          style={{
+            padding: "3px 10px",
+            borderRadius: "4px",
+            fontSize: "11px",
+            fontFamily: "'Inter', sans-serif",
+            cursor: "pointer",
+            transition: "all 0.15s",
+            background: measureMode ? "rgba(251,191,36,0.15)" : "transparent",
+            border: measureMode
+              ? "1px solid rgba(251,191,36,0.6)"
+              : "1px solid hsl(230 10% 18%)",
+            color: measureMode ? "rgba(251,191,36,0.95)" : "rgba(200,200,220,0.65)",
+          }}
+          data-testid="button-measure"
+        >
+          {measureMode
+            ? !measurement.a
+              ? "Measure: pick A"
+              : !measurement.b
+                ? "Measure: pick B"
+                : "Measure: click to restart"
+            : "Measure"}
+        </button>
       </div>
 
       <div className="relative flex-1 overflow-hidden">
@@ -592,6 +747,88 @@ export default function ChannelPage() {
         </div>
 
         <div ref={containerRef} className="absolute inset-0" />
+
+        {/* Measure tool readout */}
+        {readout && (
+          <div
+            className="absolute bottom-3 right-16 z-10 px-3 py-2 rounded"
+            style={{
+              background: "hsl(230 14% 9% / 0.85)",
+              backdropFilter: "blur(8px)",
+              border: "1px solid rgba(251,191,36,0.45)",
+              minWidth: "230px",
+              fontFamily: "'JetBrains Mono', monospace",
+            }}
+            data-testid="panel-measure-readout"
+          >
+            <div
+              style={{
+                color: "rgba(251,191,36,0.85)",
+                fontSize: "9px",
+                letterSpacing: "0.08em",
+                marginBottom: "4px",
+              }}
+            >
+              MEASURE
+            </div>
+            <div
+              style={{
+                color: "rgba(200,200,220,0.55)",
+                fontSize: "10px",
+                marginBottom: "6px",
+              }}
+            >
+              {formatDateLabel(readout.t1)} → {formatDateLabel(readout.t2)}
+            </div>
+            <div
+              className="flex justify-between gap-3"
+              style={{
+                color: "rgba(220,220,235,0.9)",
+                fontSize: "11px",
+                lineHeight: "1.5",
+              }}
+            >
+              <div>
+                <div style={{ color: "rgba(200,200,220,0.5)", fontSize: "9px" }}>
+                  TIME
+                </div>
+                <div>{readout.days}d</div>
+                <div style={{ color: "rgba(200,200,220,0.6)" }}>
+                  {readout.weeks}w · {readout.months}mo · {readout.years}y
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ color: "rgba(200,200,220,0.5)", fontSize: "9px" }}>
+                  Δ PRICE
+                </div>
+                <div>
+                  {readout.dPrice >= 0 ? "+" : ""}
+                  {readout.dPrice.toFixed(2)}
+                </div>
+                <div
+                  style={{
+                    color: readout.pct >= 0 ? "#4ade80" : "#f87171",
+                    fontWeight: 500,
+                  }}
+                >
+                  {readout.pct >= 0 ? "+" : ""}
+                  {readout.pct.toFixed(2)}%
+                </div>
+              </div>
+            </div>
+            <div
+              style={{
+                color: "rgba(200,200,220,0.4)",
+                fontSize: "9px",
+                marginTop: "6px",
+                paddingTop: "6px",
+                borderTop: "1px solid hsl(230 10% 16%)",
+              }}
+            >
+              A: {readout.p1.toFixed(2)} · B: {readout.p2.toFixed(2)} · Esc to clear
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
