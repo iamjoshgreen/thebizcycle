@@ -13,8 +13,8 @@ import { useToast } from "@/hooks/use-toast";
 
 const FRACTAL_START_ISO = "1994-11-18";
 const FRACTAL_END_ISO = "2002-10-04";
-const DEFAULT_RECENT_START_ISO = "2009-03-06";
-const DEFAULT_ANCHOR_ISO = "2009-03-06";
+const DEFAULT_RECENT_START_ISO = "2012-03-06";
+const DEFAULT_ANCHOR_ISO = "2021-05-25";
 
 function isoToUnix(iso: string): number {
   return Math.floor(new Date(iso + "T00:00:00Z").getTime() / 1000);
@@ -43,6 +43,39 @@ export default function FractalPage() {
 
   const [anchorDate, setAnchorDate] = useState(DEFAULT_ANCHOR_ISO);
   const [recentStartDate, setRecentStartDate] = useState(DEFAULT_RECENT_START_ISO);
+  const [yScale, setYScale] = useState(1.0);
+  // 'auto' = recompute on data/anchor changes, 'manual' = user has overridden
+  const [yScaleSource, setYScaleSource] = useState<"auto" | "manual">("auto");
+
+  const payload = refreshMutation.data ?? chartData;
+  const spxM2 = payload?.spxM2 ?? [];
+  const lastUpdated = payload?.lastUpdated ?? null;
+
+  // Auto-compute the matched yScale (so the fractal's peak lands on today's peak)
+  // whenever data, anchor, or start date changes — unless the user has overridden.
+  useEffect(() => {
+    if (yScaleSource !== "auto" || spxM2.length === 0) return;
+    const recentStartTs = isoToUnix(recentStartDate);
+    const anchorTs = isoToUnix(anchorDate);
+    const fractalStartTs = isoToUnix(FRACTAL_START_ISO);
+    const fractalEndTs = isoToUnix(FRACTAL_END_ISO);
+    const recent = spxM2.filter((p) => p.time >= recentStartTs);
+    const fractal = spxM2.filter(
+      (p) => p.time >= fractalStartTs && p.time <= fractalEndTs,
+    );
+    const anchor = spxM2.find((p) => p.time >= anchorTs);
+    if (recent.length === 0 || fractal.length === 0 || !anchor || !fractal[0].value) return;
+    const recentMax = recent.reduce((m, p) => (p.value > m ? p.value : m), 0);
+    const fractalMax = fractal.reduce((m, p) => (p.value > m ? p.value : m), 0);
+    const baseRatio = anchor.value / fractal[0].value;
+    if (baseRatio <= 0 || fractalMax <= 0) return;
+    const newY = recentMax / (fractalMax * baseRatio);
+    setYScale(parseFloat(newY.toFixed(3)));
+  }, [spxM2, recentStartDate, anchorDate, yScaleSource]);
+
+  const handleMatchPeaks = useCallback(() => {
+    setYScaleSource("auto"); // re-arm auto-fit; the effect above does the math
+  }, []);
 
   const handleRefresh = useCallback(() => {
     refreshMutation.mutate(undefined, {
@@ -54,10 +87,6 @@ export default function FractalPage() {
         }),
     });
   }, [refreshMutation, toast]);
-
-  const payload = refreshMutation.data ?? chartData;
-  const spxM2 = payload?.spxM2 ?? [];
-  const lastUpdated = payload?.lastUpdated ?? null;
 
   // Initialize chart once
   useEffect(() => {
@@ -155,10 +184,10 @@ export default function FractalPage() {
       fractalSeries.setData([]);
       return;
     }
-    const scaleRatio = anchorPoint.value / f0.value;
+    const scaleRatio = (anchorPoint.value / f0.value) * yScale;
     const baseTime = anchorPoint.time; // align to a real Friday timestamp
 
-    // Project fractal: time-shift so f0 → baseTime, value-scale so f0 → anchorPoint.value
+    // Project fractal: time-shift so f0 → baseTime, value-scale by ratio × yScale
     const projected = fractalData
       .map((p) => ({
         time: (baseTime + (p.time - f0.time)) as UTCTimestamp,
@@ -175,7 +204,7 @@ export default function FractalPage() {
       from: recentStartTs as UTCTimestamp,
       to: rightEdge,
     });
-  }, [spxM2, recentStartDate, anchorDate]);
+  }, [spxM2, recentStartDate, anchorDate, yScale]);
 
   const fractalSpanYears = (
     (isoToUnix(FRACTAL_END_ISO) - isoToUnix(FRACTAL_START_ISO)) /
@@ -261,6 +290,85 @@ export default function FractalPage() {
             data-testid="input-start-date"
           />
         </label>
+
+        <div style={{ width: "1px", height: "18px", background: "hsl(230 10% 16%)" }} />
+
+        <label
+          className="flex items-center gap-2"
+          style={{
+            color: "rgba(200,200,220,0.55)",
+            fontSize: "11px",
+            fontFamily: "'Inter', sans-serif",
+          }}
+          title="Multiplier on the fractal's vertical scale. 1.0 = anchor first point exactly. <1 = pull fractal down, >1 = push up."
+        >
+          Y-scale
+          <input
+            type="number"
+            value={yScale}
+            step={0.05}
+            min={0.2}
+            max={2}
+            onChange={(e) => {
+              const v = parseFloat(e.target.value);
+              if (!isNaN(v) && v > 0) {
+                setYScale(v);
+                setYScaleSource("manual");
+              }
+            }}
+            style={{ ...inputStyle, width: "70px" }}
+            data-testid="input-yscale"
+          />
+        </label>
+
+        <button
+          onClick={handleMatchPeaks}
+          title="Auto-fit yScale so the fractal's peak matches today's peak"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "5px",
+            padding: "3px 10px",
+            borderRadius: "4px",
+            fontSize: "11px",
+            fontFamily: "'Inter', sans-serif",
+            cursor: "pointer",
+            transition: "all 0.15s",
+            background: "transparent",
+            border: "1px solid rgba(251,191,36,0.35)",
+            color: "rgba(251,191,36,0.85)",
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLElement).style.background = "rgba(251,191,36,0.08)";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLElement).style.background = "transparent";
+          }}
+          data-testid="button-match-peaks"
+        >
+          Match peaks
+        </button>
+
+        <button
+          onClick={() => {
+            setYScale(1.0);
+            setYScaleSource("manual");
+          }}
+          title="Reset Y-scale to 1.0 (anchor-only scaling, no peak match)"
+          style={{
+            padding: "3px 8px",
+            borderRadius: "4px",
+            fontSize: "11px",
+            fontFamily: "'Inter', sans-serif",
+            cursor: "pointer",
+            background: "transparent",
+            border: "1px solid hsl(230 10% 18%)",
+            color: "rgba(200,200,220,0.5)",
+          }}
+          data-testid="button-reset-yscale"
+        >
+          Reset
+        </button>
       </div>
 
       <div className="relative flex-1 overflow-hidden">
