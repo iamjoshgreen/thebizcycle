@@ -44,38 +44,10 @@ export default function FractalPage() {
   const [anchorDate, setAnchorDate] = useState(DEFAULT_ANCHOR_ISO);
   const [recentStartDate, setRecentStartDate] = useState(DEFAULT_RECENT_START_ISO);
   const [yScale, setYScale] = useState(0.64);
-  // 'auto' = recompute on data/anchor changes, 'manual' = user has overridden
-  const [yScaleSource, setYScaleSource] = useState<"auto" | "manual">("manual");
 
   const payload = refreshMutation.data ?? chartData;
   const spxM2 = payload?.spxM2 ?? [];
   const lastUpdated = payload?.lastUpdated ?? null;
-
-  // Auto-compute the matched yScale (so the fractal's peak lands on today's peak)
-  // whenever data, anchor, or start date changes — unless the user has overridden.
-  useEffect(() => {
-    if (yScaleSource !== "auto" || spxM2.length === 0) return;
-    const recentStartTs = isoToUnix(recentStartDate);
-    const anchorTs = isoToUnix(anchorDate);
-    const fractalStartTs = isoToUnix(FRACTAL_START_ISO);
-    const fractalEndTs = isoToUnix(FRACTAL_END_ISO);
-    const recent = spxM2.filter((p) => p.time >= recentStartTs);
-    const fractal = spxM2.filter(
-      (p) => p.time >= fractalStartTs && p.time <= fractalEndTs,
-    );
-    const anchor = spxM2.find((p) => p.time >= anchorTs);
-    if (recent.length === 0 || fractal.length === 0 || !anchor || !fractal[0].value) return;
-    const recentMax = recent.reduce((m, p) => (p.value > m ? p.value : m), 0);
-    const fractalMax = fractal.reduce((m, p) => (p.value > m ? p.value : m), 0);
-    const baseRatio = anchor.value / fractal[0].value;
-    if (baseRatio <= 0 || fractalMax <= 0) return;
-    const newY = recentMax / (fractalMax * baseRatio);
-    setYScale(parseFloat(newY.toFixed(3)));
-  }, [spxM2, recentStartDate, anchorDate, yScaleSource]);
-
-  const handleMatchPeaks = useCallback(() => {
-    setYScaleSource("auto"); // re-arm auto-fit; the effect above does the math
-  }, []);
 
   const handleRefresh = useCallback(() => {
     refreshMutation.mutate(undefined, {
@@ -322,39 +294,8 @@ export default function FractalPage() {
         </label>
 
         <button
-          onClick={handleMatchPeaks}
-          title="Auto-fit yScale so the fractal's peak matches today's peak"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "5px",
-            padding: "3px 10px",
-            borderRadius: "4px",
-            fontSize: "11px",
-            fontFamily: "'Inter', sans-serif",
-            cursor: "pointer",
-            transition: "all 0.15s",
-            background: "transparent",
-            border: "1px solid rgba(251,191,36,0.35)",
-            color: "rgba(251,191,36,0.85)",
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLElement).style.background = "rgba(251,191,36,0.08)";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLElement).style.background = "transparent";
-          }}
-          data-testid="button-match-peaks"
-        >
-          Match peaks
-        </button>
-
-        <button
-          onClick={() => {
-            setYScale(1.0);
-            setYScaleSource("manual");
-          }}
-          title="Reset Y-scale to 1.0 (anchor-only scaling, no peak match)"
+          onClick={() => setYScale(1.0)}
+          title="Reset Y-scale to 1.0 (anchor-only scaling)"
           style={{
             padding: "3px 8px",
             borderRadius: "4px",
