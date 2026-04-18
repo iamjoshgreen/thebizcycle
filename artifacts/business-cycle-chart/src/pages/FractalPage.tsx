@@ -43,9 +43,9 @@ export default function FractalPage() {
 
   const [anchorDate, setAnchorDate] = useState(DEFAULT_ANCHOR_ISO);
   const [recentStartDate, setRecentStartDate] = useState(DEFAULT_RECENT_START_ISO);
-  const [yScale, setYScale] = useState(1.0);
+  const [yScale, setYScale] = useState(0.64);
   // 'auto' = recompute on data/anchor changes, 'manual' = user has overridden
-  const [yScaleSource, setYScaleSource] = useState<"auto" | "manual">("auto");
+  const [yScaleSource, setYScaleSource] = useState<"auto" | "manual">("manual");
 
   const payload = refreshMutation.data ?? chartData;
   const spxM2 = payload?.spxM2 ?? [];
