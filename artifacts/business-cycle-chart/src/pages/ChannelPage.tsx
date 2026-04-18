@@ -219,13 +219,19 @@ export default function ChannelPage() {
     });
   }, [refreshMutation, toast]);
 
+  // Track disposal so any callback that races teardown can bail out.
+  const disposedRef = useRef(false);
+
   // Initialize chart once
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    disposedRef.current = false;
 
     const chart = createChart(container, {
-      autoSize: true,
+      width: container.clientWidth || 800,
+      height: container.clientHeight || 600,
+      autoSize: false,
       layout: {
         background: { type: ColorType.Solid, color: "#0A0A0D" },
         textColor: "rgba(200,200,220,0.65)",
@@ -291,9 +297,37 @@ export default function ChannelPage() {
     });
     midSeriesRef.current = mid;
 
+    // Own the resize lifecycle. autoSize:true uses an internal ResizeObserver
+    // that can fire callbacks AFTER chart.remove(), throwing "Object is
+    // disposed". Owning it ourselves lets us disconnect first and guard with
+    // disposedRef.
+    const ro = new ResizeObserver((entries) => {
+      if (disposedRef.current) return;
+      const entry = entries[0];
+      if (!entry) return;
+      const w = Math.floor(entry.contentRect.width);
+      const h = Math.floor(entry.contentRect.height);
+      if (w <= 0 || h <= 0) return;
+      try {
+        chart.resize(w, h);
+      } catch {
+        /* chart was torn down between rAF and our callback */
+      }
+    });
+    ro.observe(container);
+
     return () => {
-      // Detach the band primitive BEFORE removing the chart so any in-flight
-      // render frame doesn't try to draw on a disposed canvas binding.
+      // Order matters:
+      //   1. Mark disposed so any in-flight callback bails out.
+      //   2. Disconnect the observer so no new resize fires.
+      //   3. Detach the band primitive so its draw() can't run on a dead chart.
+      //   4. Finally remove the chart.
+      disposedRef.current = true;
+      try {
+        ro.disconnect();
+      } catch {
+        /* ok */
+      }
       if (primitiveRef.current && spxSeriesRef.current) {
         try {
           spxSeriesRef.current.detachPrimitive(primitiveRef.current as never);
@@ -302,7 +336,11 @@ export default function ChannelPage() {
         }
       }
       primitiveRef.current = null;
-      chart.remove();
+      try {
+        chart.remove();
+      } catch {
+        /* ok */
+      }
       chartRef.current = null;
       spxSeriesRef.current = null;
       lowerSeriesRef.current = null;
@@ -479,7 +517,13 @@ export default function ChannelPage() {
       }
     };
     chart.subscribeClick(handler);
-    return () => chart.unsubscribeClick(handler);
+    return () => {
+      try {
+        chart.unsubscribeClick(handler);
+      } catch {
+        /* chart torn down */
+      }
+    };
   }, [measureMode]);
 
   // --- Measure tool: live cursor tracking (only while waiting for B) ---
@@ -510,7 +554,11 @@ export default function ChannelPage() {
     };
     chart.subscribeCrosshairMove(handler);
     return () => {
-      chart.unsubscribeCrosshairMove(handler);
+      try {
+        chart.unsubscribeCrosshairMove(handler);
+      } catch {
+        /* chart torn down */
+      }
       setCursor(null);
     };
   }, [measureMode, pointA, pointB]);

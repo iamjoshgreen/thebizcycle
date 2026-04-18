@@ -40,6 +40,7 @@ export default function FractalPage() {
   const refreshMutation = useRefreshChart();
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const disposedRef = useRef(false);
   const recentSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const fractalSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
 
@@ -75,9 +76,12 @@ export default function FractalPage() {
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    disposedRef.current = false;
 
     const chart = createChart(container, {
-      autoSize: true,
+      width: container.clientWidth || 800,
+      height: container.clientHeight || 600,
+      autoSize: false,
       layout: {
         background: { type: ColorType.Solid, color: "#0A0A0D" },
         textColor: "rgba(200,200,220,0.65)",
@@ -122,8 +126,34 @@ export default function FractalPage() {
     });
     fractalSeriesRef.current = fractal;
 
+    // Own the resize lifecycle (see ChannelPage for rationale).
+    const ro = new ResizeObserver((entries) => {
+      if (disposedRef.current) return;
+      const entry = entries[0];
+      if (!entry) return;
+      const w = Math.floor(entry.contentRect.width);
+      const h = Math.floor(entry.contentRect.height);
+      if (w <= 0 || h <= 0) return;
+      try {
+        chart.resize(w, h);
+      } catch {
+        /* torn down */
+      }
+    });
+    ro.observe(container);
+
     return () => {
-      chart.remove();
+      disposedRef.current = true;
+      try {
+        ro.disconnect();
+      } catch {
+        /* ok */
+      }
+      try {
+        chart.remove();
+      } catch {
+        /* ok */
+      }
       chartRef.current = null;
       recentSeriesRef.current = null;
       fractalSeriesRef.current = null;
@@ -225,7 +255,13 @@ export default function FractalPage() {
       }
     };
     chart.subscribeClick(handler);
-    return () => chart.unsubscribeClick(handler);
+    return () => {
+      try {
+        chart.unsubscribeClick(handler);
+      } catch {
+        /* chart torn down */
+      }
+    };
   }, [measureMode]);
 
   // --- Measure tool: live cursor tracking (only while waiting for B) ---
@@ -256,7 +292,11 @@ export default function FractalPage() {
     };
     chart.subscribeCrosshairMove(handler);
     return () => {
-      chart.unsubscribeCrosshairMove(handler);
+      try {
+        chart.unsubscribeCrosshairMove(handler);
+      } catch {
+        /* chart torn down */
+      }
       setCursor(null);
     };
   }, [measureMode, pointA, pointB]);

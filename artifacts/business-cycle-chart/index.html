@@ -8,6 +8,43 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      // Swallow lightweight-charts' "Object is disposed" race that fires from
+      // an internal ResizeObserver after chart.remove(). Registered inline in
+      // <head> so it runs BEFORE @vite/client's error overlay listener — that
+      // way capture-phase stopImmediatePropagation actually prevents the
+      // overlay from displaying. Must stay synchronous and dependency-free.
+      (function () {
+        function isDisposed(msg) {
+          return typeof msg === "string" && msg.indexOf("Object is disposed") !== -1;
+        }
+        window.addEventListener(
+          "error",
+          function (e) {
+            var msg = e && (e.message || (e.error && e.error.message));
+            if (isDisposed(msg)) {
+              e.preventDefault();
+              e.stopImmediatePropagation();
+              return false;
+            }
+          },
+          true
+        );
+        window.addEventListener(
+          "unhandledrejection",
+          function (e) {
+            var r = e && e.reason;
+            var msg = typeof r === "string" ? r : r && r.message;
+            if (isDisposed(msg)) {
+              e.preventDefault();
+              e.stopImmediatePropagation();
+              return false;
+            }
+          },
+          true
+        );
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
