@@ -58,56 +58,64 @@ class ChannelBandRenderer implements IPrimitivePaneRenderer {
   ) {}
 
   draw(target: Parameters<IPrimitivePaneRenderer["draw"]>[0]): void {
-    const { aTime, aPrice, bTime, bPrice, height } = this._math;
-    if (bTime === aTime) return;
+    // Wrap entire draw in try/catch: lightweight-charts can schedule a draw
+    // after the chart/series has been disposed (e.g. during HMR or fast
+    // navigation), throwing "Object is disposed". That's a benign race —
+    // we just skip the frame.
+    try {
+      const { aTime, aPrice, bTime, bPrice, height } = this._math;
+      if (bTime === aTime) return;
 
-    const slope = (bPrice - aPrice) / (bTime - aTime);
-    const lowerAt = (t: number): number => aPrice + slope * (t - aTime);
+      const slope = (bPrice - aPrice) / (bTime - aTime);
+      const lowerAt = (t: number): number => aPrice + slope * (t - aTime);
 
-    const ts = this._chart.timeScale();
-    const range = ts.getVisibleRange();
-    if (!range) return;
+      const ts = this._chart.timeScale();
+      const range = ts.getVisibleRange();
+      if (!range) return;
 
-    const tL = Number(range.from);
-    const tR = Number(range.to);
-    if (!Number.isFinite(tL) || !Number.isFinite(tR)) return;
+      const tL = Number(range.from);
+      const tR = Number(range.to);
+      if (!Number.isFinite(tL) || !Number.isFinite(tR)) return;
 
-    const lowL = lowerAt(tL);
-    const lowR = lowerAt(tR);
-    const upL = lowL + height;
-    const upR = lowR + height;
+      const lowL = lowerAt(tL);
+      const lowR = lowerAt(tR);
+      const upL = lowL + height;
+      const upR = lowR + height;
 
-    const xL = ts.timeToCoordinate(tL as UTCTimestamp);
-    const xR = ts.timeToCoordinate(tR as UTCTimestamp);
-    const yLowL = this._series.priceToCoordinate(lowL);
-    const yLowR = this._series.priceToCoordinate(lowR);
-    const yUpL = this._series.priceToCoordinate(upL);
-    const yUpR = this._series.priceToCoordinate(upR);
+      const xL = ts.timeToCoordinate(tL as UTCTimestamp);
+      const xR = ts.timeToCoordinate(tR as UTCTimestamp);
+      const yLowL = this._series.priceToCoordinate(lowL);
+      const yLowR = this._series.priceToCoordinate(lowR);
+      const yUpL = this._series.priceToCoordinate(upL);
+      const yUpR = this._series.priceToCoordinate(upR);
 
-    if (
-      xL == null ||
-      xR == null ||
-      yLowL == null ||
-      yLowR == null ||
-      yUpL == null ||
-      yUpR == null
-    )
-      return;
+      if (
+        xL == null ||
+        xR == null ||
+        yLowL == null ||
+        yLowR == null ||
+        yUpL == null ||
+        yUpR == null
+      )
+        return;
 
-    target.useBitmapCoordinateSpace(
-      ({ context: ctx, horizontalPixelRatio: hpr, verticalPixelRatio: vpr }) => {
-        ctx.save();
-        ctx.beginPath();
-        ctx.moveTo(xL * hpr, yUpL * vpr);
-        ctx.lineTo(xR * hpr, yUpR * vpr);
-        ctx.lineTo(xR * hpr, yLowR * vpr);
-        ctx.lineTo(xL * hpr, yLowL * vpr);
-        ctx.closePath();
-        ctx.fillStyle = "rgba(41, 98, 255, 0.18)";
-        ctx.fill();
-        ctx.restore();
-      },
-    );
+      target.useBitmapCoordinateSpace(
+        ({ context: ctx, horizontalPixelRatio: hpr, verticalPixelRatio: vpr }) => {
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(xL * hpr, yUpL * vpr);
+          ctx.lineTo(xR * hpr, yUpR * vpr);
+          ctx.lineTo(xR * hpr, yLowR * vpr);
+          ctx.lineTo(xL * hpr, yLowL * vpr);
+          ctx.closePath();
+          ctx.fillStyle = "rgba(41, 98, 255, 0.18)";
+          ctx.fill();
+          ctx.restore();
+        },
+      );
+    } catch {
+      /* chart was disposed mid-frame; safe to skip */
+    }
   }
 }
 
