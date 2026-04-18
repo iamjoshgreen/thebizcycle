@@ -50,9 +50,11 @@ export default function FractalPage() {
   // --- Measure tool state ---
   type MeasurePoint = { time: number; price: number };
   const [measureMode, setMeasureMode] = useState(false);
-  const [anchor, setAnchor] = useState<MeasurePoint | null>(null);
+  const [pointA, setPointA] = useState<MeasurePoint | null>(null);
+  const [pointB, setPointB] = useState<MeasurePoint | null>(null);
   const [cursor, setCursor] = useState<MeasurePoint | null>(null);
-  const anchorLineRef = useRef<IPriceLine | null>(null);
+  const anchorLineARef = useRef<IPriceLine | null>(null);
+  const anchorLineBRef = useRef<IPriceLine | null>(null);
 
   const payload = refreshMutation.data ?? chartData;
   const spxM2 = payload?.spxM2 ?? [];
@@ -187,7 +189,18 @@ export default function FractalPage() {
     });
   }, [spxM2, recentStartDate, anchorDate, yScale]);
 
-  // --- Measure tool: click sets/replaces the anchor ---
+  // Refs mirror A/B so the click handler always reads fresh values
+  // without re-subscribing every state change.
+  const pointARef = useRef<MeasurePoint | null>(null);
+  const pointBRef = useRef<MeasurePoint | null>(null);
+  useEffect(() => {
+    pointARef.current = pointA;
+  }, [pointA]);
+  useEffect(() => {
+    pointBRef.current = pointB;
+  }, [pointB]);
+
+  // --- Measure tool: clicks cycle A → B → reset (new A) ---
   useEffect(() => {
     const chart = chartRef.current;
     const recent = recentSeriesRef.current;
@@ -199,17 +212,30 @@ export default function FractalPage() {
       if (price == null || !isFinite(price)) return;
       const time = typeof param.time === "number" ? param.time : Number(param.time);
       if (!Number.isFinite(time)) return;
-      setAnchor({ time, price });
+      const pt: MeasurePoint = { time, price };
+      const a = pointARef.current;
+      const b = pointBRef.current;
+      if (!a) {
+        setPointA(pt);
+      } else if (!b) {
+        setPointB(pt);
+      } else {
+        setPointA(pt);
+        setPointB(null);
+      }
     };
     chart.subscribeClick(handler);
     return () => chart.unsubscribeClick(handler);
   }, [measureMode]);
 
-  // --- Measure tool: live cursor tracking via crosshair move ---
+  // --- Measure tool: live cursor tracking (only while waiting for B) ---
   useEffect(() => {
     const chart = chartRef.current;
     const recent = recentSeriesRef.current;
-    if (!chart || !recent || !measureMode || !anchor) return;
+    if (!chart || !recent || !measureMode || !pointA || pointB) {
+      setCursor(null);
+      return;
+    }
 
     const handler = (param: MouseEventParams) => {
       if (!param.point || param.time == null) {
@@ -233,30 +259,52 @@ export default function FractalPage() {
       chart.unsubscribeCrosshairMove(handler);
       setCursor(null);
     };
-  }, [measureMode, anchor]);
+  }, [measureMode, pointA, pointB]);
 
-  // --- Measure tool: dashed gold price line at the anchor ---
+  // --- Measure tool: dashed gold price lines at A and B ---
   useEffect(() => {
     const series = recentSeriesRef.current;
-    if (!series || !anchor) return;
+    if (!series || !pointA) return;
     const line = series.createPriceLine({
-      price: anchor.price,
+      price: pointA.price,
       color: "rgba(251,191,36,0.85)",
       lineWidth: 1,
       lineStyle: 2,
       axisLabelVisible: true,
       title: "A",
     });
-    anchorLineRef.current = line;
+    anchorLineARef.current = line;
     return () => {
       try {
         series.removePriceLine(line);
       } catch {
         /* series may already be destroyed */
       }
-      anchorLineRef.current = null;
+      anchorLineARef.current = null;
     };
-  }, [anchor?.price]);
+  }, [pointA?.price]);
+
+  useEffect(() => {
+    const series = recentSeriesRef.current;
+    if (!series || !pointB) return;
+    const line = series.createPriceLine({
+      price: pointB.price,
+      color: "rgba(251,191,36,0.85)",
+      lineWidth: 1,
+      lineStyle: 2,
+      axisLabelVisible: true,
+      title: "B",
+    });
+    anchorLineBRef.current = line;
+    return () => {
+      try {
+        series.removePriceLine(line);
+      } catch {
+        /* series may already be destroyed */
+      }
+      anchorLineBRef.current = null;
+    };
+  }, [pointB?.price]);
 
   // --- Measure tool: Esc clears + exits ---
   useEffect(() => {
@@ -264,7 +312,8 @@ export default function FractalPage() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setMeasureMode(false);
-        setAnchor(null);
+        setPointA(null);
+        setPointB(null);
         setCursor(null);
       }
     };
@@ -272,13 +321,15 @@ export default function FractalPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [measureMode]);
 
-  // --- Derived live readout: anchor → cursor ---
+  // --- Derived readout (locked A→B, or live A→cursor) ---
   const readout = (() => {
-    if (!anchor || !cursor) return null;
-    const t1 = Math.min(anchor.time, cursor.time);
-    const t2 = Math.max(anchor.time, cursor.time);
-    const p1 = anchor.time <= cursor.time ? anchor.price : cursor.price;
-    const p2 = anchor.time <= cursor.time ? cursor.price : anchor.price;
+    if (!pointA) return null;
+    const endpoint = pointB ?? cursor;
+    if (!endpoint) return null;
+    const t1 = Math.min(pointA.time, endpoint.time);
+    const t2 = Math.max(pointA.time, endpoint.time);
+    const p1 = pointA.time <= endpoint.time ? pointA.price : endpoint.price;
+    const p2 = pointA.time <= endpoint.time ? endpoint.price : pointA.price;
     const days = Math.round((t2 - t1) / 86400);
     const weeks = (days / 7).toFixed(1);
     const months = (days / 30.44).toFixed(1);
@@ -286,10 +337,11 @@ export default function FractalPage() {
     const dPrice = p2 - p1;
     const pct = p1 !== 0 ? (dPrice / p1) * 100 : 0;
     return {
-      anchorTime: anchor.time,
-      anchorPrice: anchor.price,
-      cursorTime: cursor.time,
-      cursorPrice: cursor.price,
+      locked: !!pointB,
+      aTime: pointA.time,
+      aPrice: pointA.price,
+      bTime: endpoint.time,
+      bPrice: endpoint.price,
       t1,
       t2,
       days,
@@ -435,20 +487,15 @@ export default function FractalPage() {
 
         <button
           onClick={() => {
-            if (measureMode) {
-              setMeasureMode(false);
-              setAnchor(null);
-              setCursor(null);
-            } else {
-              setMeasureMode(true);
-              setAnchor(null);
-              setCursor(null);
-            }
+            setMeasureMode((m) => !m);
+            setPointA(null);
+            setPointB(null);
+            setCursor(null);
           }}
           title={
             measureMode
               ? "Exit measure mode (Esc)"
-              : "Click to drop an anchor, then move your mouse to see live time + % from that point"
+              : "Click to set A (live readout follows mouse), click again to lock B"
           }
           style={{
             padding: "3px 10px",
@@ -466,9 +513,11 @@ export default function FractalPage() {
           data-testid="button-measure"
         >
           {measureMode
-            ? !anchor
-              ? "Measure: drop anchor"
-              : "Measure: live"
+            ? !pointA
+              ? "Measure: pick A"
+              : !pointB
+                ? "Measure: pick B (live)"
+                : "Measure: locked · click to restart"
             : "Measure"}
         </button>
       </div>
@@ -563,8 +612,8 @@ export default function FractalPage() {
 
         <div ref={containerRef} className="absolute inset-0" />
 
-        {/* Measure tool: anchor hint when no cursor yet */}
-        {measureMode && !anchor && (
+        {/* Measure tool: hint when no A yet */}
+        {measureMode && !pointA && (
           <div
             className="absolute bottom-3 right-16 z-10 px-3 py-2 rounded"
             style={{
@@ -601,7 +650,7 @@ export default function FractalPage() {
                 marginBottom: "4px",
               }}
             >
-              MEASURE · LIVE
+              {readout.locked ? "MEASURE · LOCKED" : "MEASURE · LIVE"}
             </div>
             <div
               style={{
@@ -612,12 +661,12 @@ export default function FractalPage() {
               }}
             >
               <div>
-                A: {formatDateLabel(readout.anchorTime)} @{" "}
-                {readout.anchorPrice.toFixed(4)}
+                A: {formatDateLabel(readout.aTime)} @{" "}
+                {readout.aPrice.toFixed(4)}
               </div>
               <div>
-                →: {formatDateLabel(readout.cursorTime)} @{" "}
-                {readout.cursorPrice.toFixed(4)}
+                B: {formatDateLabel(readout.bTime)} @{" "}
+                {readout.bPrice.toFixed(4)}
               </div>
             </div>
             <div
@@ -665,7 +714,9 @@ export default function FractalPage() {
                 borderTop: "1px solid hsl(230 10% 16%)",
               }}
             >
-              Click to move anchor · Esc to clear
+              {readout.locked
+                ? "Click to start a new measurement · Esc to clear"
+                : "Click to lock B · Esc to cancel"}
             </div>
           </div>
         )}
