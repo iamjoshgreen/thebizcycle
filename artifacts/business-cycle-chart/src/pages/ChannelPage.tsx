@@ -18,15 +18,17 @@ import { useToast } from "@/hooks/use-toast";
 const SPX_START_ISO = "2018-01-01";       // SPX history shown
 const CHANNEL_START_ISO = "2020-02-01";   // channel only valid from here
 const CHANNEL_FUTURE_DAYS = 180;          // extend channel ~6 months past today
-// Defaults match the standard post-COVID channel: A & B = two swing lows
-// (COVID low + April 2025 low) define the lower trend line.
-// C = the Jan 2022 ATH; the parallel upper rail passes exactly through it.
-const DEFAULT_A_DATE = "2020-03-23";
-const DEFAULT_A_PRICE = 2237;
-const DEFAULT_B_DATE = "2025-04-04";
-const DEFAULT_B_PRICE = 5000;
-const DEFAULT_C_DATE = "2022-01-04";
-const DEFAULT_C_PRICE = 4818;
+// Defaults are derived from the TradingView parallel-channel anchors:
+// upper rail through (2020-02-10, 3416.45) and (2026-05-18, 7232.15),
+// channel width 1366.57. A & B are those two points shifted down by the
+// width to define the lower rail; C sits on the upper rail at the same
+// time as A so the parallel offset matches TV exactly.
+const DEFAULT_A_DATE = "2020-02-10";
+const DEFAULT_A_PRICE = 2049.88;
+const DEFAULT_B_DATE = "2026-05-18";
+const DEFAULT_B_PRICE = 5865.58;
+const DEFAULT_C_DATE = "2020-02-10";
+const DEFAULT_C_PRICE = 3416.45;
 
 function isoToUnix(iso: string): number {
   return Math.floor(new Date(iso + "T00:00:00Z").getTime() / 1000);
