@@ -18,11 +18,15 @@ import { useToast } from "@/hooks/use-toast";
 const SPX_START_ISO = "2018-01-01";       // SPX history shown
 const CHANNEL_START_ISO = "2020-02-01";   // channel only valid from here
 const CHANNEL_FUTURE_DAYS = 180;          // extend channel ~6 months past today
+// Defaults: A & B = two swing lows (COVID + 2022 bear low) defining the lower
+// trend line. C = a swing high the parallel upper rail must pass through
+// (Jan 2022 ATH).
 const DEFAULT_A_DATE = "2020-03-23";
 const DEFAULT_A_PRICE = 2237;
-const DEFAULT_B_DATE = "2025-04-04";
-const DEFAULT_B_PRICE = 5000;
-const DEFAULT_HEIGHT = 1500;
+const DEFAULT_B_DATE = "2022-10-13";
+const DEFAULT_B_PRICE = 3491;
+const DEFAULT_C_DATE = "2022-01-04";
+const DEFAULT_C_PRICE = 4818;
 
 function isoToUnix(iso: string): number {
   return Math.floor(new Date(iso + "T00:00:00Z").getTime() / 1000);
@@ -47,7 +51,8 @@ interface ChannelMath {
   aPrice: number;
   bTime: number;
   bPrice: number;
-  height: number;
+  cTime: number;
+  cPrice: number;
 }
 
 class ChannelBandRenderer implements IPrimitivePaneRenderer {
@@ -63,11 +68,15 @@ class ChannelBandRenderer implements IPrimitivePaneRenderer {
     // navigation), throwing "Object is disposed". That's a benign race —
     // we just skip the frame.
     try {
-      const { aTime, aPrice, bTime, bPrice, height } = this._math;
+      const { aTime, aPrice, bTime, bPrice, cTime, cPrice } = this._math;
       if (bTime === aTime) return;
 
+      // A→B defines one trend rail. C is the parallel anchor: the second rail
+      // is the same slope, shifted vertically so it passes exactly through C.
       const slope = (bPrice - aPrice) / (bTime - aTime);
-      const lowerAt = (t: number): number => aPrice + slope * (t - aTime);
+      const railOneAt = (t: number): number => aPrice + slope * (t - aTime);
+      const offset = cPrice - railOneAt(cTime);
+      const railTwoAt = (t: number): number => railOneAt(t) + offset;
 
       const ts = this._chart.timeScale();
       const range = ts.getVisibleRange();
@@ -77,10 +86,16 @@ class ChannelBandRenderer implements IPrimitivePaneRenderer {
       const tR = Number(range.to);
       if (!Number.isFinite(tL) || !Number.isFinite(tR)) return;
 
-      const lowL = lowerAt(tL);
-      const lowR = lowerAt(tR);
-      const upL = lowL + height;
-      const upR = lowR + height;
+      // Sort so the band always fills between actual lower and upper rails,
+      // regardless of whether C sits above or below the A-B line.
+      const r1L = railOneAt(tL);
+      const r1R = railOneAt(tR);
+      const r2L = railTwoAt(tL);
+      const r2R = railTwoAt(tR);
+      const lowL = Math.min(r1L, r2L);
+      const lowR = Math.min(r1R, r2R);
+      const upL = Math.max(r1L, r2L);
+      const upR = Math.max(r1R, r2R);
 
       const xL = ts.timeToCoordinate(tL as UTCTimestamp);
       const xR = ts.timeToCoordinate(tR as UTCTimestamp);
@@ -175,7 +190,8 @@ export default function ChannelPage() {
   const [aPrice, setAPrice] = useState(String(DEFAULT_A_PRICE));
   const [bDate, setBDate] = useState(DEFAULT_B_DATE);
   const [bPrice, setBPrice] = useState(String(DEFAULT_B_PRICE));
-  const [height, setHeight] = useState(String(DEFAULT_HEIGHT));
+  const [cDate, setCDate] = useState(DEFAULT_C_DATE);
+  const [cPrice, setCPrice] = useState(String(DEFAULT_C_PRICE));
 
   // --- Measure tool state ---
   type MeasurePoint = { time: number; price: number };
@@ -300,9 +316,10 @@ export default function ChannelPage() {
       aPrice: clampPositive(parseFloat(aPrice), DEFAULT_A_PRICE),
       bTime: isoToUnix(bDate),
       bPrice: clampPositive(parseFloat(bPrice), DEFAULT_B_PRICE),
-      height: clampPositive(parseFloat(height), DEFAULT_HEIGHT),
+      cTime: isoToUnix(cDate),
+      cPrice: clampPositive(parseFloat(cPrice), DEFAULT_C_PRICE),
     };
-  }, [aDate, aPrice, bDate, bPrice, height]);
+  }, [aDate, aPrice, bDate, bPrice, cDate, cPrice]);
 
   // Update data + channel lines + shaded band
   useEffect(() => {
@@ -348,17 +365,23 @@ export default function ChannelPage() {
       spxVisible.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })),
     );
 
-    const { aTime, aPrice: aP, bTime, bPrice: bP, height: h } = math;
+    const { aTime, aPrice: aP, bTime, bPrice: bP, cTime, cPrice: cP } = math;
     if (
       !Number.isFinite(aTime) ||
       !Number.isFinite(bTime) ||
+      !Number.isFinite(cTime) ||
       bTime === aTime
     ) {
       clearChannel();
       return;
     }
     const slope = (bP - aP) / (bTime - aTime);
-    const lowerAt = (t: number) => aP + slope * (t - aTime);
+    const railOneAt = (t: number) => aP + slope * (t - aTime);
+    const offset = cP - railOneAt(cTime);
+    const railTwoAt = (t: number) => railOneAt(t) + offset;
+    const lowerAt = (t: number) => Math.min(railOneAt(t), railTwoAt(t));
+    const upperAt = (t: number) => Math.max(railOneAt(t), railTwoAt(t));
+    const midAt = (t: number) => (railOneAt(t) + railTwoAt(t)) / 2;
 
     // Build the channel timeline: every weekly Friday tick that we already
     // have SPX data for (>= channel start) plus synthetic future Fridays so
@@ -386,11 +409,11 @@ export default function ChannelPage() {
     }));
     const upperData = channelTimes.map((t) => ({
       time: t as UTCTimestamp,
-      value: lowerAt(t) + h,
+      value: upperAt(t),
     }));
     const midData = channelTimes.map((t) => ({
       time: t as UTCTimestamp,
-      value: lowerAt(t) + h / 2,
+      value: midAt(t),
     }));
     lower.setData(lowerData);
     upper.setData(upperData);
@@ -670,14 +693,21 @@ export default function ChannelPage() {
         </label>
 
         <label className="flex items-center gap-2">
-          <span style={labelStyle}>Height</span>
+          <span style={labelStyle}>Anchor C</span>
+          <input
+            type="date"
+            value={cDate}
+            onChange={(e) => setCDate(e.target.value)}
+            style={inputStyle}
+            data-testid="input-c-date"
+          />
           <input
             type="number"
             step="any"
-            value={height}
-            onChange={(e) => setHeight(e.target.value)}
+            value={cPrice}
+            onChange={(e) => setCPrice(e.target.value)}
             style={numberInputStyle}
-            data-testid="input-height"
+            data-testid="input-c-price"
           />
         </label>
 
@@ -687,7 +717,8 @@ export default function ChannelPage() {
             setAPrice(String(DEFAULT_A_PRICE));
             setBDate(DEFAULT_B_DATE);
             setBPrice(String(DEFAULT_B_PRICE));
-            setHeight(String(DEFAULT_HEIGHT));
+            setCDate(DEFAULT_C_DATE);
+            setCPrice(String(DEFAULT_C_PRICE));
           }}
           title="Reset channel anchors to defaults"
           style={{
