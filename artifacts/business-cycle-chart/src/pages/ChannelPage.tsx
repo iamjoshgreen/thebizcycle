@@ -13,7 +13,9 @@ import {
 import TopBar from "@/components/TopBar";
 import { useToast } from "@/hooks/use-toast";
 
-const CHANNEL_START_ISO = "2020-02-01";
+const SPX_START_ISO = "2018-01-01";       // SPX history shown
+const CHANNEL_START_ISO = "2020-02-01";   // channel only valid from here
+const CHANNEL_FUTURE_DAYS = 180;          // extend channel ~6 months past today
 const DEFAULT_A_DATE = "2020-03-23";
 const DEFAULT_A_PRICE = 2237;
 const DEFAULT_B_DATE = "2025-04-04";
@@ -297,16 +299,17 @@ export default function ChannelPage() {
       return;
     }
 
-    const startTs = isoToUnix(CHANNEL_START_ISO);
-    const visible = spx.filter((p) => p.time >= startTs);
-    if (visible.length === 0) {
+    // SPX: show extended history (e.g. since 2018) — gives context before the
+    // channel begins.
+    const spxStartTs = isoToUnix(SPX_START_ISO);
+    const spxVisible = spx.filter((p) => p.time >= spxStartTs);
+    if (spxVisible.length === 0) {
       spxSeries.setData([]);
       clearChannel();
       return;
     }
-
     spxSeries.setData(
-      visible.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })),
+      spxVisible.map((p) => ({ time: p.time as UTCTimestamp, value: p.value })),
     );
 
     const { aTime, aPrice: aP, bTime, bPrice: bP, height: h } = math;
@@ -321,17 +324,37 @@ export default function ChannelPage() {
     const slope = (bP - aP) / (bTime - aTime);
     const lowerAt = (t: number) => aP + slope * (t - aTime);
 
-    const lowerData = visible.map((p) => ({
-      time: p.time as UTCTimestamp,
-      value: lowerAt(p.time),
+    // Build the channel timeline: every weekly Friday tick that we already
+    // have SPX data for (>= channel start) plus synthetic future Fridays so
+    // the channel extends to the right of today's last bar — letting you
+    // watch price approach the rails.
+    const channelStartTs = isoToUnix(CHANNEL_START_ISO);
+    const channelHistTimes = spxVisible
+      .filter((p) => p.time >= channelStartTs)
+      .map((p) => p.time);
+    if (channelHistTimes.length === 0) {
+      clearChannel();
+      return;
+    }
+    const lastSpxTs = channelHistTimes[channelHistTimes.length - 1];
+    const futureSteps = Math.floor(CHANNEL_FUTURE_DAYS / 7);
+    const futureTimes: number[] = [];
+    for (let i = 1; i <= futureSteps; i++) {
+      futureTimes.push(lastSpxTs + i * 7 * 86400);
+    }
+    const channelTimes = [...channelHistTimes, ...futureTimes];
+
+    const lowerData = channelTimes.map((t) => ({
+      time: t as UTCTimestamp,
+      value: lowerAt(t),
     }));
-    const upperData = visible.map((p) => ({
-      time: p.time as UTCTimestamp,
-      value: lowerAt(p.time) + h,
+    const upperData = channelTimes.map((t) => ({
+      time: t as UTCTimestamp,
+      value: lowerAt(t) + h,
     }));
-    const midData = visible.map((p) => ({
-      time: p.time as UTCTimestamp,
-      value: lowerAt(p.time) + h / 2,
+    const midData = channelTimes.map((t) => ({
+      time: t as UTCTimestamp,
+      value: lowerAt(t) + h / 2,
     }));
     lower.setData(lowerData);
     upper.setData(upperData);
@@ -349,11 +372,10 @@ export default function ChannelPage() {
     primitiveRef.current = prim;
     spxSeries.attachPrimitive(prim as never);
 
-    // Fit visible range to channel window
-    const lastTs = visible[visible.length - 1].time;
+    // Fit visible range: from SPX start through ~CHANNEL_FUTURE_DAYS past today
     chart.timeScale().setVisibleRange({
-      from: startTs as UTCTimestamp,
-      to: (lastTs + 30 * 86400) as UTCTimestamp,
+      from: spxStartTs as UTCTimestamp,
+      to: (lastSpxTs + (CHANNEL_FUTURE_DAYS + 14) * 86400) as UTCTimestamp,
     });
   }, [spx, math]);
 
