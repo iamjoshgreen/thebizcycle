@@ -205,7 +205,8 @@ export default function ChannelPage() {
   const anchorLineBRef = useRef<IPriceLine | null>(null);
 
   const payload = refreshMutation.data ?? chartData;
-  const spx = payload?.spx ?? [];
+  // Channel page uses daily SPX bars; fall back to weekly only if daily missing
+  const spx = (payload?.spxDaily && payload.spxDaily.length > 0) ? payload.spxDaily : (payload?.spx ?? []);
   const lastUpdated = payload?.lastUpdated ?? null;
 
   const handleRefresh = useCallback(() => {
@@ -858,7 +859,7 @@ export default function ChannelPage() {
               marginBottom: "4px",
             }}
           >
-            S&amp;P 500 · WEEKLY
+            S&amp;P 500 · DAILY
           </div>
           <div
             className="flex items-center gap-2"
