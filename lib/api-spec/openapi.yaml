@@ -144,6 +144,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DataPoint"
+        cpi:
+          type: array
+          items:
+            $ref: "#/components/schemas/DataPoint"
       required:
         - oil
         - unrate
@@ -151,3 +155,4 @@ components:
         - dgs10
         - t10y2y
         - btc
+        - cpi

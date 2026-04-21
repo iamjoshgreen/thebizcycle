@@ -4,7 +4,7 @@ import TopBar from "@/components/TopBar";
 import Chart, { OVERLAY_CONFIG, type ChartHandle, type MeasureResult, type Overlays } from "@/components/Chart";
 import { useToast } from "@/hooks/use-toast";
 
-const EMPTY: Overlays = { spx: [], oil: [], unrate: [], fedfunds: [], dgs10: [], t10y2y: [], btc: [] };
+const EMPTY: Overlays = { spx: [], oil: [], unrate: [], fedfunds: [], dgs10: [], t10y2y: [], btc: [], cpi: [] };
 
 function formatTs(ts: number): string {
   const d = new Date(ts * 1000);

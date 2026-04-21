@@ -13,4 +13,6 @@ export interface Overlays {
   fedfunds: DataPoint[];
   dgs10: DataPoint[];
   t10y2y: DataPoint[];
+  btc: DataPoint[];
+  cpi: DataPoint[];
 }

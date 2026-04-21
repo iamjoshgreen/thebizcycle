@@ -29,13 +29,12 @@ export interface Overlays {
   dgs10: DataPoint[];
   t10y2y: DataPoint[];
   btc: DataPoint[];
+  cpi: DataPoint[];
 }
 
 export interface ChartPayload {
   composite: DataPoint[];
   spx: DataPoint[];
-  /** SPX divided by WM2NS (M2 money supply, weekly NSA) — normalizes for monetary expansion */
-  spxM2: DataPoint[];
   recessions: RecessionInterval[];
   overlays: Overlays;
   /** Unix timestamp in seconds when cache was populated */

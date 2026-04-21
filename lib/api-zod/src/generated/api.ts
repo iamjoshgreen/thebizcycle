@@ -69,6 +69,18 @@ export const GetChartResponse = zod.object({
         value: zod.number(),
       }),
     ),
+    btc: zod.array(
+      zod.object({
+        time: zod.number().describe("Unix timestamp in seconds (Friday close)"),
+        value: zod.number(),
+      }),
+    ),
+    cpi: zod.array(
+      zod.object({
+        time: zod.number().describe("Unix timestamp in seconds (Friday close)"),
+        value: zod.number(),
+      }),
+    ),
   }),
   lastUpdated: zod
     .number()
@@ -124,6 +136,18 @@ export const RefreshChartResponse = zod.object({
       }),
     ),
     t10y2y: zod.array(
+      zod.object({
+        time: zod.number().describe("Unix timestamp in seconds (Friday close)"),
+        value: zod.number(),
+      }),
+    ),
+    btc: zod.array(
+      zod.object({
+        time: zod.number().describe("Unix timestamp in seconds (Friday close)"),
+        value: zod.number(),
+      }),
+    ),
+    cpi: zod.array(
       zod.object({
         time: zod.number().describe("Unix timestamp in seconds (Friday close)"),
         value: zod.number(),

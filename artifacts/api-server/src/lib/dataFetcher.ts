@@ -23,6 +23,7 @@ interface Overlays {
   dgs10: DataPoint[];
   t10y2y: DataPoint[];
   btc: DataPoint[];
+  cpi: DataPoint[];
 }
 
 export interface ChartPayload {
@@ -290,6 +291,7 @@ export async function fetchAndCompute(): Promise<ChartPayload> {
       dgs10: mapToSeries(dgs10Weekly),
       t10y2y: mapToSeries(t10y2yWeekly),
       btc: mapToSeries(btcWeekly),
+      cpi: mapToSeries(cpiauscslWeekly),
     },
     lastUpdated: Math.floor(Date.now() / 1000),
   };
