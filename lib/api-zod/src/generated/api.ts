@@ -32,15 +32,6 @@ export const GetChartResponse = zod.object({
       value: zod.number(),
     }),
   ),
-  spxDaily: zod
-    .array(
-      zod.object({
-        time: zod.number().describe("Unix timestamp in seconds (Friday close)"),
-        value: zod.number(),
-      }),
-    )
-    .optional()
-    .describe("Daily SPX closes from 2018-01-01 (used by Channel page)"),
   recessions: zod.array(
     zod.object({
       start: zod.number().describe("Unix timestamp in seconds"),
@@ -113,15 +104,6 @@ export const RefreshChartResponse = zod.object({
       value: zod.number(),
     }),
   ),
-  spxDaily: zod
-    .array(
-      zod.object({
-        time: zod.number().describe("Unix timestamp in seconds (Friday close)"),
-        value: zod.number(),
-      }),
-    )
-    .optional()
-    .describe("Daily SPX closes from 2018-01-01 (used by Channel page)"),
   recessions: zod.array(
     zod.object({
       start: zod.number().describe("Unix timestamp in seconds"),

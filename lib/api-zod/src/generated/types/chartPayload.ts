@@ -12,8 +12,6 @@ import type { RecessionInterval } from "./recessionInterval";
 export interface ChartPayload {
   composite: DataPoint[];
   spx: DataPoint[];
-  /** Daily SPX closes from 2018-01-01 (used by Channel page) */
-  spxDaily?: DataPoint[];
   recessions: RecessionInterval[];
   overlays: Overlays;
   /** Unix timestamp in seconds when cache was populated */

@@ -29,7 +29,6 @@ interface Overlays {
 export interface ChartPayload {
   composite: DataPoint[];
   spx: DataPoint[];
-  spxDaily: DataPoint[];
   spxM2: DataPoint[];
   recessions: RecessionInterval[];
   overlays: Overlays;
@@ -132,16 +131,11 @@ export async function fetchAndCompute(): Promise<ChartPayload> {
   const startDate = new Date("1959-01-02");
 
   // Include the current partial week so the latest close is always visible
-  const [spxResult, spxDailyResult, btcResult] = await Promise.all([
+  const [spxResult, btcResult] = await Promise.all([
     yahooFinance.chart("^GSPC", {
       period1: "1959-01-01",
       period2: today.toISOString().slice(0, 10),
       interval: "1wk",
-    }),
-    yahooFinance.chart("^GSPC", {
-      period1: "2018-01-01",
-      period2: today.toISOString().slice(0, 10),
-      interval: "1d",
     }),
     yahooFinance.chart("BTC-USD", {
       period1: "2010-01-01",
@@ -149,19 +143,6 @@ export async function fetchAndCompute(): Promise<ChartPayload> {
       interval: "1wk",
     }),
   ]);
-
-  // Daily SPX series for Channel page
-  const spxDaily: DataPoint[] = [];
-  if (spxDailyResult.quotes) {
-    for (const q of spxDailyResult.quotes) {
-      if (q.date && q.close != null) {
-        const d = new Date(q.date);
-        d.setHours(0, 0, 0, 0);
-        spxDaily.push({ time: toUnix(d), value: q.close });
-      }
-    }
-    spxDaily.sort((a, b) => a.time - b.time);
-  }
 
   const spxMap = new Map<number, number>();
   if (spxResult.quotes) {
@@ -304,7 +285,6 @@ export async function fetchAndCompute(): Promise<ChartPayload> {
   return {
     composite,
     spx: spxSeries,
-    spxDaily,
     spxM2: spxM2Series,
     recessions,
     overlays: {
