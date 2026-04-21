@@ -440,6 +440,81 @@ export default function HousingPage() {
               </div>
             </div>
 
+            {/* How this works — 3-column strategy explainer */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr 1fr",
+                gap: 14,
+              }}
+              data-testid="strategy-explainer"
+            >
+              {[
+                {
+                  label: "WHAT",
+                  title: "Track 5 housing data points",
+                  body:
+                    "New home sales, building permits, building activity, construction jobs, and home prices. They're the five links in the housing supply chain.",
+                },
+                {
+                  label: "WHY",
+                  title: "Housing leads the economy",
+                  body:
+                    "When the Fed tightens, housing breaks first. A real downturn moves through these five in a fixed mechanical order — buyers respond to rates, builders respond to buyers, payrolls respond to builders.",
+                },
+                {
+                  label: "HOW",
+                  title: "Order matters more than count",
+                  body:
+                    "If they peak in order — sales → permits → activity → jobs → prices — recession typically follows 12 to 36 months later. If they fall out of order, it's noise (rate spike, supply shock) and the signal resets.",
+                },
+              ].map((cell) => (
+                <div
+                  key={cell.label}
+                  style={{
+                    background: "hsl(230 14% 9% / 0.45)",
+                    border: "1px solid hsl(230 10% 16%)",
+                    borderRadius: 8,
+                    padding: "14px 16px",
+                  }}
+                >
+                  <div
+                    style={{
+                      color: "rgba(180,180,200,0.5)",
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: 11,
+                      letterSpacing: "0.12em",
+                    }}
+                  >
+                    {cell.label}
+                  </div>
+                  <div
+                    style={{
+                      color: "rgba(225,230,240,0.95)",
+                      fontFamily: "'Inter', sans-serif",
+                      fontSize: 15,
+                      fontWeight: 600,
+                      letterSpacing: "-0.01em",
+                      marginTop: 4,
+                    }}
+                  >
+                    {cell.title}
+                  </div>
+                  <div
+                    style={{
+                      color: "rgba(180,185,200,0.7)",
+                      fontFamily: "'Inter', sans-serif",
+                      fontSize: 13,
+                      lineHeight: 1.55,
+                      marginTop: 6,
+                    }}
+                  >
+                    {cell.body}
+                  </div>
+                </div>
+              ))}
+            </div>
+
             {/* HIDDEN: legacy stat row (kept structure for future re-add) */}
             <div style={{ display: "none" }}>
             <div style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr 1.6fr 1.2fr", gap: 14 }}>
