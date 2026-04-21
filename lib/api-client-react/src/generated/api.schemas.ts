@@ -40,3 +40,64 @@ export interface ChartPayload {
   /** Unix timestamp in seconds when cache was populated */
   lastUpdated: number;
 }
+
+export interface MonthlyPoint {
+  time: number;
+  value: number;
+}
+
+export type DominoStatusId =
+  (typeof DominoStatusId)[keyof typeof DominoStatusId];
+
+export const DominoStatusId = {
+  newSales: "newSales",
+  permits: "permits",
+  underConstruction: "underConstruction",
+  employment: "employment",
+  homePrices: "homePrices",
+} as const;
+
+export type DominoStatusState =
+  (typeof DominoStatusState)[keyof typeof DominoStatusState];
+
+export const DominoStatusState = {
+  expanding: "expanding",
+  rolling_over: "rolling_over",
+  fallen: "fallen",
+} as const;
+
+export interface DominoStatus {
+  id: DominoStatusId;
+  label: string;
+  series: string;
+  current: number | null;
+  currentDate: number | null;
+  peakValue: number | null;
+  peakDate: number | null;
+  pctOffPeak: number | null;
+  monthsSincePeak: number | null;
+  roc3m: number | null;
+  roc6m: number | null;
+  state: DominoStatusState;
+  fallen: boolean;
+  data: MonthlyPoint[];
+}
+
+export interface FedStatus {
+  current: number | null;
+  yearAgo: number | null;
+  tightening: boolean;
+  data: MonthlyPoint[];
+}
+
+export interface HousingPayload {
+  fed: FedStatus;
+  dominoes: DominoStatus[];
+  stage: number;
+  stageLabel: string;
+  expectedTimingMonths: number[] | null;
+  expectedTimingNote: string | null;
+  sequenceValid: boolean;
+  sequenceNote: string;
+  lastUpdated: number;
+}

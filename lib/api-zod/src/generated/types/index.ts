@@ -8,6 +8,12 @@
 
 export * from "./chartPayload";
 export * from "./dataPoint";
+export * from "./dominoStatus";
+export * from "./dominoStatusId";
+export * from "./dominoStatusState";
+export * from "./fedStatus";
 export * from "./healthStatus";
+export * from "./housingPayload";
+export * from "./monthlyPoint";
 export * from "./overlays";
 export * from "./recessionInterval";

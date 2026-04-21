@@ -16,7 +16,7 @@ import type {
   UseQueryResult,
 } from "@tanstack/react-query";
 
-import type { ChartPayload, HealthStatus } from "./api.schemas";
+import type { ChartPayload, HealthStatus, HousingPayload } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
 import type { ErrorType } from "../custom-fetch";
@@ -251,4 +251,161 @@ export const useRefreshChart = <
   TContext
 > => {
   return useMutation(getRefreshChartMutationOptions(options));
+};
+
+/**
+ * Returns the residential construction cycle dominoes, stage, and Fed status
+ * @summary Get housing domino payload
+ */
+export const getGetHousingUrl = () => {
+  return `/api/housing`;
+};
+
+export const getHousing = async (
+  options?: RequestInit,
+): Promise<HousingPayload> => {
+  return customFetch<HousingPayload>(getGetHousingUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetHousingQueryKey = () => {
+  return [`/api/housing`] as const;
+};
+
+export const getGetHousingQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHousing>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getHousing>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetHousingQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHousing>>> = ({
+    signal,
+  }) => getHousing({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHousing>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetHousingQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHousing>>
+>;
+export type GetHousingQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get housing domino payload
+ */
+
+export function useGetHousing<
+  TData = Awaited<ReturnType<typeof getHousing>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getHousing>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHousingQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Force refresh housing data
+ */
+export const getRefreshHousingUrl = () => {
+  return `/api/housing/refresh`;
+};
+
+export const refreshHousing = async (
+  options?: RequestInit,
+): Promise<HousingPayload> => {
+  return customFetch<HousingPayload>(getRefreshHousingUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRefreshHousingMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof refreshHousing>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof refreshHousing>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["refreshHousing"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof refreshHousing>>,
+    void
+  > = () => {
+    return refreshHousing(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RefreshHousingMutationResult = NonNullable<
+  Awaited<ReturnType<typeof refreshHousing>>
+>;
+
+export type RefreshHousingMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Force refresh housing data
+ */
+export const useRefreshHousing = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof refreshHousing>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof refreshHousing>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getRefreshHousingMutationOptions(options));
 };

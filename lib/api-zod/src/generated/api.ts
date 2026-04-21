@@ -158,3 +158,110 @@ export const RefreshChartResponse = zod.object({
     .number()
     .describe("Unix timestamp in seconds when cache was populated"),
 });
+
+/**
+ * Returns the residential construction cycle dominoes, stage, and Fed status
+ * @summary Get housing domino payload
+ */
+export const GetHousingResponse = zod.object({
+  fed: zod.object({
+    current: zod.number().nullable(),
+    yearAgo: zod.number().nullable(),
+    tightening: zod.boolean(),
+    data: zod.array(
+      zod.object({
+        time: zod.number(),
+        value: zod.number(),
+      }),
+    ),
+  }),
+  dominoes: zod.array(
+    zod.object({
+      id: zod.enum([
+        "newSales",
+        "permits",
+        "underConstruction",
+        "employment",
+        "homePrices",
+      ]),
+      label: zod.string(),
+      series: zod.string(),
+      current: zod.number().nullable(),
+      currentDate: zod.number().nullable(),
+      peakValue: zod.number().nullable(),
+      peakDate: zod.number().nullable(),
+      pctOffPeak: zod.number().nullable(),
+      monthsSincePeak: zod.number().nullable(),
+      roc3m: zod.number().nullable(),
+      roc6m: zod.number().nullable(),
+      state: zod.enum(["expanding", "rolling_over", "fallen"]),
+      fallen: zod.boolean(),
+      data: zod.array(
+        zod.object({
+          time: zod.number(),
+          value: zod.number(),
+        }),
+      ),
+    }),
+  ),
+  stage: zod.number(),
+  stageLabel: zod.string(),
+  expectedTimingMonths: zod.array(zod.number()).nullable(),
+  expectedTimingNote: zod.string().nullable(),
+  sequenceValid: zod.boolean(),
+  sequenceNote: zod.string(),
+  lastUpdated: zod.number(),
+});
+
+/**
+ * @summary Force refresh housing data
+ */
+export const RefreshHousingResponse = zod.object({
+  fed: zod.object({
+    current: zod.number().nullable(),
+    yearAgo: zod.number().nullable(),
+    tightening: zod.boolean(),
+    data: zod.array(
+      zod.object({
+        time: zod.number(),
+        value: zod.number(),
+      }),
+    ),
+  }),
+  dominoes: zod.array(
+    zod.object({
+      id: zod.enum([
+        "newSales",
+        "permits",
+        "underConstruction",
+        "employment",
+        "homePrices",
+      ]),
+      label: zod.string(),
+      series: zod.string(),
+      current: zod.number().nullable(),
+      currentDate: zod.number().nullable(),
+      peakValue: zod.number().nullable(),
+      peakDate: zod.number().nullable(),
+      pctOffPeak: zod.number().nullable(),
+      monthsSincePeak: zod.number().nullable(),
+      roc3m: zod.number().nullable(),
+      roc6m: zod.number().nullable(),
+      state: zod.enum(["expanding", "rolling_over", "fallen"]),
+      fallen: zod.boolean(),
+      data: zod.array(
+        zod.object({
+          time: zod.number(),
+          value: zod.number(),
+        }),
+      ),
+    }),
+  ),
+  stage: zod.number(),
+  stageLabel: zod.string(),
+  expectedTimingMonths: zod.array(zod.number()).nullable(),
+  expectedTimingNote: zod.string().nullable(),
+  sequenceValid: zod.boolean(),
+  sequenceNote: zod.string(),
+  lastUpdated: zod.number(),
+});

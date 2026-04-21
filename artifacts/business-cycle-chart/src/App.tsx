@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import ChartPage from "@/pages/ChartPage";
 import FractalPage from "@/pages/FractalPage";
 import ChannelPage from "@/pages/ChannelPage";
+import HousingPage from "@/pages/HousingPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -21,6 +22,7 @@ function Router() {
       <Route path="/" component={ChartPage} />
       <Route path="/fractal" component={FractalPage} />
       <Route path="/channel" component={ChannelPage} />
+      <Route path="/housing" component={HousingPage} />
     </Switch>
   );
 }

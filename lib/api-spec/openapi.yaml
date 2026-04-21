@@ -55,6 +55,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/ChartPayload"
 
+  /housing:
+    get:
+      operationId: getHousing
+      tags: [housing]
+      summary: Get housing domino payload
+      description: Returns the residential construction cycle dominoes, stage, and Fed status
+      responses:
+        "200":
+          description: Housing payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HousingPayload"
+
+  /housing/refresh:
+    post:
+      operationId: refreshHousing
+      tags: [housing]
+      summary: Force refresh housing data
+      responses:
+        "200":
+          description: Refreshed housing payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HousingPayload"
+
 components:
   schemas:
     HealthStatus:
@@ -156,3 +183,126 @@ components:
         - t10y2y
         - btc
         - cpi
+
+    MonthlyPoint:
+      type: object
+      properties:
+        time:
+          type: number
+        value:
+          type: number
+      required: [time, value]
+
+    DominoStatus:
+      type: object
+      properties:
+        id:
+          type: string
+          enum: [newSales, permits, underConstruction, employment, homePrices]
+        label:
+          type: string
+        series:
+          type: string
+        current:
+          type: number
+          nullable: true
+        currentDate:
+          type: number
+          nullable: true
+        peakValue:
+          type: number
+          nullable: true
+        peakDate:
+          type: number
+          nullable: true
+        pctOffPeak:
+          type: number
+          nullable: true
+        monthsSincePeak:
+          type: number
+          nullable: true
+        roc3m:
+          type: number
+          nullable: true
+        roc6m:
+          type: number
+          nullable: true
+        state:
+          type: string
+          enum: [expanding, rolling_over, fallen]
+        fallen:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/MonthlyPoint"
+      required:
+        - id
+        - label
+        - series
+        - current
+        - currentDate
+        - peakValue
+        - peakDate
+        - pctOffPeak
+        - monthsSincePeak
+        - roc3m
+        - roc6m
+        - state
+        - fallen
+        - data
+
+    FedStatus:
+      type: object
+      properties:
+        current:
+          type: number
+          nullable: true
+        yearAgo:
+          type: number
+          nullable: true
+        tightening:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/MonthlyPoint"
+      required: [current, yearAgo, tightening, data]
+
+    HousingPayload:
+      type: object
+      properties:
+        fed:
+          $ref: "#/components/schemas/FedStatus"
+        dominoes:
+          type: array
+          items:
+            $ref: "#/components/schemas/DominoStatus"
+        stage:
+          type: number
+        stageLabel:
+          type: string
+        expectedTimingMonths:
+          type: array
+          nullable: true
+          items:
+            type: number
+        expectedTimingNote:
+          type: string
+          nullable: true
+        sequenceValid:
+          type: boolean
+        sequenceNote:
+          type: string
+        lastUpdated:
+          type: number
+      required:
+        - fed
+        - dominoes
+        - stage
+        - stageLabel
+        - expectedTimingMonths
+        - expectedTimingNote
+        - sequenceValid
+        - sequenceNote
+        - lastUpdated
