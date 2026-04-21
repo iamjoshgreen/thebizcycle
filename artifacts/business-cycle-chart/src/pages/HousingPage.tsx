@@ -55,7 +55,7 @@ interface SparklineProps {
   height?: number;
 }
 
-function Sparkline({ data, peakDate, state, width = 260, height = 56 }: SparklineProps) {
+function Sparkline({ data, peakDate, state, width = 320, height = 80 }: SparklineProps) {
   if (data.length < 2) {
     return (
       <div
@@ -146,28 +146,28 @@ function DominoCard({ d, index }: { d: DominoStatus; index: number }) {
         minWidth: 0,
         background: c.bg,
         border: `1px solid ${c.border}`,
-        borderRadius: 6,
-        padding: "10px 12px",
+        borderRadius: 8,
+        padding: "16px 18px",
         display: "flex",
         flexDirection: "column",
-        gap: 6,
+        gap: 12,
       }}
       data-testid={`domino-${d.id}`}
     >
       {/* Header row */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
           <div
             style={{
-              width: 18,
-              height: 18,
-              borderRadius: 4,
-              background: "rgba(0,0,0,0.35)",
+              width: 26,
+              height: 26,
+              borderRadius: 6,
+              background: "rgba(0,0,0,0.4)",
               border: `1px solid ${c.border}`,
               color: c.fg,
               fontFamily: "'JetBrains Mono', monospace",
-              fontSize: 10,
-              fontWeight: 600,
+              fontSize: 13,
+              fontWeight: 700,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -179,9 +179,9 @@ function DominoCard({ d, index }: { d: DominoStatus; index: number }) {
           <div style={{ minWidth: 0 }}>
             <div
               style={{
-                color: "rgba(220,225,235,0.92)",
+                color: "rgba(225,230,240,0.95)",
                 fontFamily: "'Inter', sans-serif",
-                fontSize: 12,
+                fontSize: 14,
                 fontWeight: 600,
                 letterSpacing: "-0.01em",
                 whiteSpace: "nowrap",
@@ -193,9 +193,9 @@ function DominoCard({ d, index }: { d: DominoStatus; index: number }) {
             </div>
             <div
               style={{
-                color: "rgba(180,180,200,0.45)",
+                color: "rgba(180,180,200,0.5)",
                 fontFamily: "'JetBrains Mono', monospace",
-                fontSize: 9,
+                fontSize: 11,
                 letterSpacing: "0.05em",
               }}
             >
@@ -203,19 +203,55 @@ function DominoCard({ d, index }: { d: DominoStatus; index: number }) {
             </div>
           </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
-          <div style={{ width: 7, height: 7, borderRadius: "50%", background: c.dot }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+          <div style={{ width: 9, height: 9, borderRadius: "50%", background: c.dot }} />
           <span
             style={{
               color: c.fg,
               fontFamily: "'JetBrains Mono', monospace",
-              fontSize: 9,
+              fontSize: 11,
               letterSpacing: "0.06em",
-              fontWeight: 600,
+              fontWeight: 700,
             }}
           >
             {stateLabel}
           </span>
+        </div>
+      </div>
+
+      {/* Big % off peak */}
+      <div>
+        <div
+          style={{
+            color: "rgba(180,180,200,0.5)",
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 10,
+            letterSpacing: "0.08em",
+          }}
+        >
+          % OFF 24-MO PEAK
+        </div>
+        <div
+          style={{
+            color: c.fg,
+            fontFamily: "'Inter', sans-serif",
+            fontSize: 26,
+            fontWeight: 700,
+            letterSpacing: "-0.02em",
+            lineHeight: 1.1,
+          }}
+        >
+          {fmtPct(d.pctOffPeak)}
+        </div>
+        <div
+          style={{
+            color: "rgba(180,180,200,0.55)",
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 11,
+            marginTop: 2,
+          }}
+        >
+          {d.monthsSincePeak ?? "—"} months since peak
         </div>
       </div>
 
@@ -224,35 +260,29 @@ function DominoCard({ d, index }: { d: DominoStatus; index: number }) {
         style={{
           display: "grid",
           gridTemplateColumns: "1fr 1fr",
-          rowGap: 3,
-          columnGap: 8,
+          rowGap: 5,
+          columnGap: 12,
           fontFamily: "'JetBrains Mono', monospace",
-          fontSize: 10,
+          fontSize: 12,
         }}
       >
-        <div style={{ color: "rgba(180,180,200,0.4)" }}>% off peak</div>
-        <div style={{ color: c.fg, textAlign: "right" }}>{fmtPct(d.pctOffPeak)}</div>
-        <div style={{ color: "rgba(180,180,200,0.4)" }}>months since peak</div>
-        <div style={{ color: "rgba(220,225,235,0.85)", textAlign: "right" }}>
-          {d.monthsSincePeak ?? "—"}
-        </div>
-        <div style={{ color: "rgba(180,180,200,0.4)" }}>3-mo Δ</div>
-        <div style={{ color: "rgba(220,225,235,0.85)", textAlign: "right" }}>{fmtPct(d.roc3m)}</div>
-        <div style={{ color: "rgba(180,180,200,0.4)" }}>6-mo Δ</div>
-        <div style={{ color: "rgba(220,225,235,0.85)", textAlign: "right" }}>{fmtPct(d.roc6m)}</div>
+        <div style={{ color: "rgba(180,180,200,0.5)" }}>3-mo Δ</div>
+        <div style={{ color: "rgba(225,230,240,0.9)", textAlign: "right" }}>{fmtPct(d.roc3m)}</div>
+        <div style={{ color: "rgba(180,180,200,0.5)" }}>6-mo Δ</div>
+        <div style={{ color: "rgba(225,230,240,0.9)", textAlign: "right" }}>{fmtPct(d.roc6m)}</div>
       </div>
 
       {/* Sparkline */}
-      <div style={{ marginTop: 2 }}>
-        <Sparkline data={d.data} peakDate={d.peakDate} state={d.state} width={260} height={48} />
+      <div>
+        <Sparkline data={d.data} peakDate={d.peakDate} state={d.state} width={320} height={70} />
         <div
           style={{
             display: "flex",
             justifyContent: "space-between",
-            color: "rgba(180,180,200,0.35)",
+            color: "rgba(180,180,200,0.5)",
             fontFamily: "'JetBrains Mono', monospace",
-            fontSize: 9,
-            marginTop: 2,
+            fontSize: 10,
+            marginTop: 4,
           }}
         >
           <span>peak {fmtMonth(d.peakDate)} · {fmtNum(d.peakValue)}</span>
@@ -301,39 +331,43 @@ export default function HousingPage() {
           </div>
         )}
 
-        {payload && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16, maxWidth: 1500, margin: "0 auto" }}>
+        {payload && (() => {
+          const fallenCount = payload.dominoes.filter((d) => d.fallen).length;
+          const rollingCount = payload.dominoes.filter((d) => d.state === "rolling_over").length;
+          return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 22, maxWidth: 1600, margin: "0 auto" }}>
             {/* Title */}
             <div>
               <div
                 style={{
-                  color: "rgba(200,200,220,0.4)",
+                  color: "rgba(200,200,220,0.45)",
                   fontFamily: "'JetBrains Mono', monospace",
-                  fontSize: 10,
-                  letterSpacing: "0.08em",
+                  fontSize: 12,
+                  letterSpacing: "0.1em",
                 }}
               >
                 RESIDENTIAL CONSTRUCTION CYCLE · 5-DOMINO SEQUENCE
               </div>
               <div
                 style={{
-                  color: "rgba(220,225,235,0.95)",
+                  color: "rgba(225,230,240,0.98)",
                   fontFamily: "'Inter', sans-serif",
-                  fontSize: 18,
-                  fontWeight: 600,
-                  letterSpacing: "-0.01em",
-                  marginTop: 2,
+                  fontSize: 26,
+                  fontWeight: 700,
+                  letterSpacing: "-0.015em",
+                  marginTop: 4,
                 }}
               >
                 Housing Cycle Tracker
               </div>
               <div
                 style={{
-                  color: "rgba(180,180,200,0.5)",
+                  color: "rgba(180,180,200,0.6)",
                   fontFamily: "'Inter', sans-serif",
-                  fontSize: 12,
-                  marginTop: 2,
-                  lineHeight: 1.4,
+                  fontSize: 14,
+                  marginTop: 4,
+                  lineHeight: 1.5,
+                  maxWidth: 900,
                 }}
               >
                 Watches the construction cycle in canonical order — sales → permits → under construction →
@@ -342,8 +376,8 @@ export default function HousingPage() {
               </div>
             </div>
 
-            {/* Gate row: Fed tightening + Stage + Sequence integrity */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr 1fr", gap: 12 }}>
+            {/* Top stat row: Fed gate + Fallen count + Stage + Sequence integrity */}
+            <div style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr 1.6fr 1.2fr", gap: 14 }}>
               {/* Fed gate */}
               <div
                 style={{
@@ -353,17 +387,17 @@ export default function HousingPage() {
                   border: payload.fed.tightening
                     ? "1px solid rgba(239,80,80,0.45)"
                     : "1px solid hsl(230 10% 18%)",
-                  borderRadius: 6,
-                  padding: "10px 14px",
+                  borderRadius: 8,
+                  padding: "16px 18px",
                 }}
                 data-testid="fed-gate"
               >
                 <div
                   style={{
-                    color: "rgba(180,180,200,0.45)",
+                    color: "rgba(180,180,200,0.55)",
                     fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: 9,
-                    letterSpacing: "0.08em",
+                    fontSize: 11,
+                    letterSpacing: "0.1em",
                   }}
                 >
                   GATE · FED POLICY
@@ -371,35 +405,110 @@ export default function HousingPage() {
                 <div
                   style={{
                     color: payload.fed.tightening
-                      ? "rgba(255,170,170,0.95)"
-                      : "rgba(180,210,200,0.85)",
+                      ? "rgba(255,170,170,0.98)"
+                      : "rgba(180,210,200,0.92)",
                     fontFamily: "'Inter', sans-serif",
-                    fontSize: 14,
-                    fontWeight: 600,
-                    marginTop: 2,
+                    fontSize: 17,
+                    fontWeight: 700,
+                    marginTop: 6,
+                    lineHeight: 1.25,
                   }}
                 >
-                  {payload.fed.tightening ? "Tightening — sequence is armed" : "Not tightening — sequence is dormant"}
+                  {payload.fed.tightening ? "Tightening" : "Not tightening"}
                 </div>
                 <div
                   style={{
-                    color: "rgba(180,180,200,0.5)",
-                    fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: 10,
+                    color: "rgba(200,205,215,0.7)",
+                    fontFamily: "'Inter', sans-serif",
+                    fontSize: 13,
                     marginTop: 2,
                   }}
                 >
-                  Fed funds {fmtNum(payload.fed.current, 2)}% · 12 mo ago {fmtNum(payload.fed.yearAgo, 2)}%
+                  {payload.fed.tightening ? "Sequence is armed" : "Sequence is dormant"}
+                </div>
+                <div
+                  style={{
+                    color: "rgba(180,180,200,0.6)",
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 12,
+                    marginTop: 8,
+                  }}
+                >
+                  Fed funds {fmtNum(payload.fed.current, 2)}%
+                  <span style={{ color: "rgba(180,180,200,0.35)" }}> · 12mo ago </span>
+                  {fmtNum(payload.fed.yearAgo, 2)}%
+                </div>
+              </div>
+
+              {/* Fallen count — at-a-glance */}
+              <div
+                style={{
+                  background:
+                    fallenCount >= 3
+                      ? "hsl(0 50% 14% / 0.6)"
+                      : fallenCount >= 1
+                        ? "hsl(35 60% 12% / 0.55)"
+                        : "hsl(230 14% 9% / 0.7)",
+                  border:
+                    fallenCount >= 3
+                      ? "1px solid rgba(239,80,80,0.55)"
+                      : fallenCount >= 1
+                        ? "1px solid rgba(245,160,40,0.45)"
+                        : "1px solid hsl(230 10% 18%)",
+                  borderRadius: 8,
+                  padding: "16px 18px",
+                  display: "flex",
+                  flexDirection: "column",
+                }}
+                data-testid="fallen-count"
+              >
+                <div
+                  style={{
+                    color: "rgba(180,180,200,0.55)",
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 11,
+                    letterSpacing: "0.1em",
+                  }}
+                >
+                  DOMINOES FALLEN
+                </div>
+                <div
+                  style={{
+                    color:
+                      fallenCount >= 3
+                        ? "rgba(255,170,170,0.98)"
+                        : fallenCount >= 1
+                          ? "rgba(255,210,140,0.95)"
+                          : "rgba(180,210,200,0.85)",
+                    fontFamily: "'Inter', sans-serif",
+                    fontSize: 36,
+                    fontWeight: 800,
+                    letterSpacing: "-0.03em",
+                    marginTop: 4,
+                    lineHeight: 1,
+                  }}
+                >
+                  {fallenCount}<span style={{ color: "rgba(180,180,200,0.4)", fontSize: 22, fontWeight: 600 }}> / 5</span>
+                </div>
+                <div
+                  style={{
+                    color: "rgba(200,205,215,0.65)",
+                    fontFamily: "'Inter', sans-serif",
+                    fontSize: 12,
+                    marginTop: 6,
+                  }}
+                >
+                  +{rollingCount} rolling over
                 </div>
               </div>
 
               {/* Stage */}
               <div
                 style={{
-                  background: "hsl(230 14% 9% / 0.7)",
+                  background: "hsl(230 14% 9% / 0.75)",
                   border: "1px solid hsl(230 10% 18%)",
-                  borderRadius: 6,
-                  padding: "10px 14px",
+                  borderRadius: 8,
+                  padding: "16px 18px",
                 }}
                 data-testid="stage-card"
               >
@@ -412,19 +521,19 @@ export default function HousingPage() {
                 >
                   <div
                     style={{
-                      color: "rgba(180,180,200,0.45)",
+                      color: "rgba(180,180,200,0.55)",
                       fontFamily: "'JetBrains Mono', monospace",
-                      fontSize: 9,
-                      letterSpacing: "0.08em",
+                      fontSize: 11,
+                      letterSpacing: "0.1em",
                     }}
                   >
-                    STAGE SCORE
+                    CONSECUTIVE STAGE SCORE
                   </div>
                   <div
                     style={{
-                      color: "rgba(220,225,235,0.85)",
+                      color: "rgba(225,230,240,0.95)",
                       fontFamily: "'JetBrains Mono', monospace",
-                      fontSize: 14,
+                      fontSize: 17,
                       fontWeight: 700,
                     }}
                   >
@@ -433,11 +542,12 @@ export default function HousingPage() {
                 </div>
                 <div
                   style={{
-                    color: "rgba(220,225,235,0.95)",
+                    color: "rgba(225,230,240,0.95)",
                     fontFamily: "'Inter', sans-serif",
-                    fontSize: 14,
+                    fontSize: 16,
                     fontWeight: 600,
-                    marginTop: 2,
+                    marginTop: 6,
+                    lineHeight: 1.3,
                   }}
                 >
                   {payload.stageLabel}
@@ -445,10 +555,10 @@ export default function HousingPage() {
                 {payload.expectedTimingNote && (
                   <div
                     style={{
-                      color: "rgba(255,210,140,0.85)",
+                      color: "rgba(255,210,140,0.95)",
                       fontFamily: "'JetBrains Mono', monospace",
-                      fontSize: 10,
-                      marginTop: 4,
+                      fontSize: 12,
+                      marginTop: 8,
                     }}
                   >
                     ⚠ {payload.expectedTimingNote}
@@ -458,8 +568,8 @@ export default function HousingPage() {
                 <div
                   style={{
                     display: "flex",
-                    gap: 3,
-                    marginTop: 6,
+                    gap: 4,
+                    marginTop: 10,
                   }}
                 >
                   {[0, 1, 2, 3, 4].map((i) => (
@@ -467,9 +577,9 @@ export default function HousingPage() {
                       key={i}
                       style={{
                         flex: 1,
-                        height: 5,
-                        borderRadius: 1,
-                        background: i < payload.stage ? "#EF4444" : "rgba(255,255,255,0.06)",
+                        height: 8,
+                        borderRadius: 2,
+                        background: i < payload.stage ? "#EF4444" : "rgba(255,255,255,0.07)",
                       }}
                     />
                   ))}
@@ -480,22 +590,22 @@ export default function HousingPage() {
               <div
                 style={{
                   background: payload.sequenceValid
-                    ? "hsl(160 30% 12% / 0.45)"
-                    : "hsl(35 60% 12% / 0.55)",
+                    ? "hsl(160 30% 12% / 0.5)"
+                    : "hsl(35 60% 12% / 0.6)",
                   border: payload.sequenceValid
-                    ? "1px solid rgba(80,180,140,0.35)"
-                    : "1px solid rgba(245,160,40,0.5)",
-                  borderRadius: 6,
-                  padding: "10px 14px",
+                    ? "1px solid rgba(80,180,140,0.4)"
+                    : "1px solid rgba(245,160,40,0.55)",
+                  borderRadius: 8,
+                  padding: "16px 18px",
                 }}
                 data-testid="sequence-integrity"
               >
                 <div
                   style={{
-                    color: "rgba(180,180,200,0.45)",
+                    color: "rgba(180,180,200,0.55)",
                     fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: 9,
-                    letterSpacing: "0.08em",
+                    fontSize: 11,
+                    letterSpacing: "0.1em",
                   }}
                 >
                   SEQUENCE INTEGRITY
@@ -503,22 +613,23 @@ export default function HousingPage() {
                 <div
                   style={{
                     color: payload.sequenceValid
-                      ? "rgba(180,210,200,0.95)"
-                      : "rgba(255,210,140,0.95)",
+                      ? "rgba(180,210,200,0.98)"
+                      : "rgba(255,210,140,0.98)",
                     fontFamily: "'Inter', sans-serif",
-                    fontSize: 14,
-                    fontWeight: 600,
-                    marginTop: 2,
+                    fontSize: 17,
+                    fontWeight: 700,
+                    marginTop: 6,
                   }}
                 >
                   {payload.sequenceValid ? "In order" : "False start"}
                 </div>
                 <div
                   style={{
-                    color: "rgba(180,180,200,0.55)",
-                    fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: 10,
-                    marginTop: 2,
+                    color: "rgba(200,205,215,0.7)",
+                    fontFamily: "'Inter', sans-serif",
+                    fontSize: 13,
+                    marginTop: 4,
+                    lineHeight: 1.4,
                   }}
                 >
                   {payload.sequenceNote}
@@ -527,7 +638,7 @@ export default function HousingPage() {
             </div>
 
             {/* Domino row */}
-            <div style={{ display: "flex", gap: 10, alignItems: "stretch" }}>
+            <div style={{ display: "flex", gap: 14, alignItems: "stretch" }}>
               {payload.dominoes.map((d, i) => (
                 <DominoCard key={d.id} d={d} index={i} />
               ))}
@@ -536,18 +647,22 @@ export default function HousingPage() {
             {/* Footer note */}
             <div
               style={{
-                color: "rgba(180,180,200,0.35)",
+                color: "rgba(180,180,200,0.45)",
                 fontFamily: "'JetBrains Mono', monospace",
-                fontSize: 10,
-                lineHeight: 1.5,
+                fontSize: 11,
+                lineHeight: 1.6,
               }}
             >
               Source: FRED (HSN1F · PERMIT · UNDCONTSA · CES2023600001 · CSUSHPINSA · FEDFUNDS). A domino is
-              "fallen" when it peaked ≥ 3 months ago, is ≥ 5% below that peak, and the 3-month rate of change is
-              negative. Stages count consecutively from the first series — order matters.
+              "fallen" when it peaked ≥ 3 months ago, is ≥ 5% below that peak, and the 3-month rate of change
+              is negative. <strong style={{ color: "rgba(220,225,235,0.7)" }}>Stage</strong> counts only
+              <em> consecutively from the first series</em> — that's why it can stay at 0 even when later
+              dominoes are red. <strong style={{ color: "rgba(220,225,235,0.7)" }}>Dominoes Fallen</strong> is
+              the raw count regardless of order.
             </div>
           </div>
-        )}
+          );
+        })()}
       </div>
     </div>
   );
