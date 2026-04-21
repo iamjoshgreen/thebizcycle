@@ -93,6 +93,19 @@ export default function ChartPage() {
         </span>
         {OVERLAY_CONFIG.map((cfg) => {
           const active = activeOverlays.has(cfg.id);
+          const series = overlays[cfg.id];
+          const lastVal = series && series.length > 0 ? series[series.length - 1].value : null;
+          const formatted = lastVal == null
+            ? null
+            : cfg.id === "btc"
+              ? `$${Math.round(lastVal).toLocaleString()}`
+              : cfg.id === "spx"
+                ? lastVal.toFixed(0)
+                : cfg.id === "cpi" || cfg.id === "unrate" || cfg.id === "fedfunds" || cfg.id === "dgs10" || cfg.id === "t10y2y"
+                  ? `${lastVal.toFixed(2)}%`
+                  : cfg.id === "oil"
+                    ? `$${lastVal.toFixed(2)}`
+                    : lastVal.toFixed(2);
           return (
             <button
               key={cfg.id}
@@ -123,6 +136,19 @@ export default function ChartPage() {
                 }}
               />
               {cfg.label}
+              {active && formatted && (
+                <span
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: "10px",
+                    fontWeight: 600,
+                    marginLeft: "2px",
+                    opacity: 0.95,
+                  }}
+                >
+                  {formatted}
+                </span>
+              )}
             </button>
           );
         })}
