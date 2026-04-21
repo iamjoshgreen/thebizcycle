@@ -249,7 +249,9 @@ function DominoCard({ d, index }: { d: DominoStatus; index: number }) {
           marginTop: -8,
         }}
       >
-        from peak · {d.monthsSincePeak ?? "—"} mo ago
+        {d.monthsSincePeak === 0
+          ? "at a new 24-month high · still rising"
+          : `from peak · ${d.monthsSincePeak ?? "—"} mo ago`}
       </div>
 
       {/* Sparkline */}
