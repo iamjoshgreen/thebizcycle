@@ -1,0 +1,13 @@
+do the 5 dominoes have to fall in order?
+
+9:41 PM
+Claude responded: Yes, according to the guide, that is the entire point of the framework.
+Yes, according to the guide, that is the entire point of the framework.
+
+The guide is explicit about this in two places. In the Flashback Friday section on 2008, it walks through the exact order the dominoes fell: new home sales peaked in summer 2005, building permits peaked in September 2005, units under construction peaked in May 2006, residential construction employment peaked in mid 2006, and home prices peaked in early 2007. The guide calls this "the sequence worked exactly as advertised" and says the cycle "unfolds in the same order. Every time."
+
+The guide's reasoning for why the order is fixed is mechanical, not statistical. New home sales move first because buyers respond immediately to mortgage rates. Permits move second because builders pull back on planning once they see sales dropping. Units under construction move third because the permits that were already issued finish working through the pipeline before the slowdown shows up in active construction. Employment moves fourth because you do not lay off construction workers until there is less to build. Prices move last because sellers resist cutting until the broader economic stress from job losses and tightened credit forces their hand. Each step causes the next, so they cannot logically happen out of order in a real cycle.
+
+That is why the sequence integrity check matters for your indicator. If you see permits rolling over before new home sales, or employment dropping before units under construction, the guide's framework says that is not the real sequence firing, it is noise or a false start. A valid signal requires the peaks to land in the correct chronological order. If they do not, your indicator should flag it as invalid rather than advancing the stage score.
+
+One nuance worth noting: the guide does not say the gaps between peaks are fixed. In 2008 the full sequence from new home sales peak to home prices peak took about 18 months, but the guide's general timing language says prices follow 12 to 36 months after the sequence starts. So the order is rigid, but the spacing between dominoes can vary.

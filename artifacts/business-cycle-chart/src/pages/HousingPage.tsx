@@ -140,17 +140,33 @@ function Sparkline({ data, peakDate, state, width = 320, height = 80 }: Sparklin
 // ─── Domino Card ──────────────────────────────────────────────────────────────
 
 const SHORT_LABELS: Record<string, string> = {
-  newSales: "New Sales",
-  permits: "Permits",
-  underConstruction: "Building",
-  constructionJobs: "Jobs",
-  homePrices: "Prices",
+  newSales: "New Home Sales",
+  permits: "Building Permits",
+  underConstruction: "Building Activity",
+  employment: "Construction Jobs",
+  homePrices: "Home Prices",
+};
+
+// Plain-English description of what each card represents and what its
+// position in the chain tells you.
+const DOMINO_MEANING: Record<string, string> = {
+  newSales:
+    "Earliest warning. When buyers stop showing up, every other housing data point follows.",
+  permits:
+    "Builders pull permits months before they break ground. A drop here means they're losing confidence in demand.",
+  underConstruction:
+    "How much builders are actually building right now. Falls when projects finish faster than new ones start.",
+  employment:
+    "Construction sector payrolls. Builders are slow to fire, so this falls late — but when it does, it spreads to the rest of the economy.",
+  homePrices:
+    "Always the last to move. Sellers cling to old prices until they can't.",
 };
 
 function DominoCard({ d, index }: { d: DominoStatus; index: number }) {
   const c = STATE_COLORS[d.state] ?? STATE_COLORS.expanding;
   const stateLabel = d.state === "fallen" ? "FALLEN" : d.state === "rolling_over" ? "ROLLING" : "OK";
   const shortLabel = SHORT_LABELS[d.id] ?? d.label;
+  const meaning = DOMINO_MEANING[d.id] ?? "";
 
   return (
     <div
@@ -167,33 +183,46 @@ function DominoCard({ d, index }: { d: DominoStatus; index: number }) {
       }}
       data-testid={`domino-${d.id}`}
     >
-      {/* Step number + name + status pill */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0 }}>
-          <span
-            style={{
-              color: "rgba(180,180,200,0.45)",
-              fontFamily: "'JetBrains Mono', monospace",
-              fontSize: 14,
-              fontWeight: 600,
-            }}
-          >
-            {index + 1}
-          </span>
-          <span
-            style={{
-              color: "rgba(230,235,245,0.98)",
-              fontFamily: "'Inter', sans-serif",
-              fontSize: 18,
-              fontWeight: 600,
-              letterSpacing: "-0.01em",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
-            {shortLabel}
-          </span>
+      {/* Step number + name (full width, can wrap) */}
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0 }}>
+        <span
+          style={{
+            color: "rgba(180,180,200,0.45)",
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 14,
+            fontWeight: 600,
+            flexShrink: 0,
+          }}
+        >
+          {index + 1}
+        </span>
+        <span
+          style={{
+            color: "rgba(230,235,245,0.98)",
+            fontFamily: "'Inter', sans-serif",
+            fontSize: 17,
+            fontWeight: 600,
+            letterSpacing: "-0.01em",
+            lineHeight: 1.2,
+          }}
+        >
+          {shortLabel}
+        </span>
+      </div>
+
+      {/* Hero: % off peak + status pill side by side */}
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+        <div
+          style={{
+            color: c.fg,
+            fontFamily: "'Inter', sans-serif",
+            fontSize: 32,
+            fontWeight: 700,
+            letterSpacing: "-0.025em",
+            lineHeight: 1,
+          }}
+        >
+          {fmtPct(d.pctOffPeak)}
         </div>
         <span
           style={{
@@ -212,33 +241,34 @@ function DominoCard({ d, index }: { d: DominoStatus; index: number }) {
         </span>
       </div>
 
-      {/* Hero: % off peak */}
-      <div
-        style={{
-          color: c.fg,
-          fontFamily: "'Inter', sans-serif",
-          fontSize: 36,
-          fontWeight: 700,
-          letterSpacing: "-0.025em",
-          lineHeight: 1,
-        }}
-      >
-        {fmtPct(d.pctOffPeak)}
-      </div>
-
       <div
         style={{
           color: "rgba(180,180,200,0.55)",
           fontFamily: "'Inter', sans-serif",
           fontSize: 13,
-          marginTop: -6,
+          marginTop: -8,
         }}
       >
         from peak · {d.monthsSincePeak ?? "—"} mo ago
       </div>
 
-      {/* Sparkline only — no extra stats grid */}
+      {/* Sparkline */}
       <Sparkline data={d.data} peakDate={d.peakDate} state={d.state} width={300} height={56} />
+
+      {/* What this card means in plain English */}
+      <div
+        style={{
+          color: "rgba(180,185,200,0.6)",
+          fontFamily: "'Inter', sans-serif",
+          fontSize: 12,
+          lineHeight: 1.5,
+          borderTop: "1px solid rgba(255,255,255,0.05)",
+          paddingTop: 10,
+          marginTop: 2,
+        }}
+      >
+        {meaning}
+      </div>
     </div>
   );
 }
@@ -292,36 +322,53 @@ export default function HousingPage() {
           let verdictBorder: string;
           let plainEnglish: string;
 
+          // Identify which dominoes are out of order for the FALSE START copy
+          const fallenIds = payload.dominoes.filter((d) => d.fallen).map((d) => SHORT_LABELS[d.id] ?? d.label);
+          const firstNotFallen = payload.dominoes.find((d) => !d.fallen);
+          const firstNotFallenName = firstNotFallen ? (SHORT_LABELS[firstNotFallen.id] ?? firstNotFallen.label) : "";
+
           if (!payload.sequenceValid) {
             verdict = "FALSE START";
             verdictColor = "#F59E0B";
             verdictBg = "hsl(35 60% 11% / 0.7)";
             verdictBorder = "rgba(245,160,40,0.6)";
-            plainEnglish = `${fallenCount} of 5 dominoes have fallen, but in the wrong order. ${payload.sequenceNote.replace(/[.!?]?\s*$/, ".")} Per the playbook, the chain has likely reset rather than continuing toward recession.`;
+            plainEnglish =
+              `${fallenIds.join(" and ")} ${fallenIds.length === 1 ? "has" : "have"} fallen, but ${firstNotFallenName} hasn't yet. ` +
+              `That's the wrong order — when builders pull back before buyers do, it's usually a supply-side shock ` +
+              `(rates spike, materials, labor) rather than demand actually weakening. ` +
+              `A real housing-led downturn starts with buyers walking away first.`;
           } else if (payload.stage >= 4) {
             verdict = "LATE STAGE";
             verdictColor = "#EF4444";
             verdictBg = "hsl(0 50% 12% / 0.7)";
             verdictBorder = "rgba(239,80,80,0.6)";
-            plainEnglish = `${payload.stage} of 5 dominoes have fallen in canonical order. ${payload.expectedTimingNote ?? "Recession risk is elevated."}`;
+            plainEnglish =
+              `${payload.stage} of 5 dominoes have fallen in the right order — buyers first, then everything downstream. ` +
+              `When the chain gets this deep, recession typically follows within 6–18 months.`;
           } else if (payload.stage >= 2) {
             verdict = "ARMED";
             verdictColor = "#F59E0B";
             verdictBg = "hsl(35 60% 11% / 0.7)";
             verdictBorder = "rgba(245,160,40,0.6)";
-            plainEnglish = `${payload.stage} of 5 dominoes have fallen in canonical order. ${payload.expectedTimingNote ?? "Watching the next stage of the chain."}`;
+            plainEnglish =
+              `${payload.stage} of 5 dominoes have fallen in the right order, starting with buyers. ` +
+              `When the chain runs in this sequence, it tends to keep going. Watch the next domino.`;
           } else if (payload.fed.tightening) {
             verdict = "WATCHING";
             verdictColor = "#60A5FA";
             verdictBg = "hsl(220 40% 11% / 0.6)";
             verdictBorder = "rgba(96,165,250,0.4)";
-            plainEnglish = `Fed is tightening (${fmtNum(payload.fed.current, 2)}% vs ${fmtNum(payload.fed.yearAgo, 2)}% a year ago) but the housing chain hasn't started in canonical order yet.`;
+            plainEnglish =
+              `Fed is tightening (${fmtNum(payload.fed.current, 2)}% now vs ${fmtNum(payload.fed.yearAgo, 2)}% a year ago), ` +
+              `which is the trigger that usually starts the housing chain. Nothing has fallen in order yet.`;
           } else {
             verdict = "DORMANT";
             verdictColor = "#10B981";
             verdictBg = "hsl(160 30% 11% / 0.6)";
             verdictBorder = "rgba(80,180,140,0.4)";
-            plainEnglish = `Fed is not tightening (${fmtNum(payload.fed.current, 2)}% vs ${fmtNum(payload.fed.yearAgo, 2)}% a year ago). The housing-led recession sequence is dormant.`;
+            plainEnglish =
+              `Fed isn't tightening (${fmtNum(payload.fed.current, 2)}% now vs ${fmtNum(payload.fed.yearAgo, 2)}% a year ago). ` +
+              `Without that pressure, the housing chain rarely starts. No recession signal here.`;
           }
 
           return (
@@ -386,9 +433,9 @@ export default function HousingPage() {
                     fontSize: 13,
                   }}
                 >
-                  <span>{fallenCount} fallen · {rollingCount} rolling · {5 - fallenCount - rollingCount} ok</span>
+                  <span>{fallenCount} fallen · {rollingCount} rolling · {5 - fallenCount - rollingCount} steady</span>
                   <span>Fed funds {fmtNum(payload.fed.current, 2)}%</span>
-                  <span>Stage {payload.stage}/5 in order</span>
+                  <span>{payload.stage}/5 in proper order</span>
                 </div>
               </div>
             </div>
@@ -665,24 +712,31 @@ export default function HousingPage() {
                 marginBottom: -8,
               }}
             >
-              <div
-                style={{
-                  color: "rgba(180,180,200,0.5)",
-                  fontFamily: "'JetBrains Mono', monospace",
-                  fontSize: 12,
-                  letterSpacing: "0.12em",
-                }}
-              >
-                THE 5 DOMINOES · CANONICAL ORDER LEFT → RIGHT
-              </div>
-              <div
-                style={{
-                  color: "rgba(180,180,200,0.45)",
-                  fontFamily: "'Inter', sans-serif",
-                  fontSize: 12,
-                }}
-              >
-                Sales lead, prices follow last
+              <div>
+                <div
+                  style={{
+                    color: "rgba(180,180,200,0.5)",
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 12,
+                    letterSpacing: "0.12em",
+                  }}
+                >
+                  THE 5 DOMINOES · LEFT TO RIGHT
+                </div>
+                <div
+                  style={{
+                    color: "rgba(180,185,200,0.65)",
+                    fontFamily: "'Inter', sans-serif",
+                    fontSize: 13,
+                    marginTop: 4,
+                    maxWidth: 900,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  In a real housing-led recession, these fall in order — left to right. Each one leads the next
+                  by months. When something falls out of order, it usually means a one-off shock, not the start
+                  of a downturn.
+                </div>
               </div>
             </div>
 
