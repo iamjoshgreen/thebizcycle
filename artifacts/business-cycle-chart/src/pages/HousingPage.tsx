@@ -99,7 +99,11 @@ function Sparkline({ data, peakDate, state, width = 320, height = 80 }: Sparklin
   const lastPt = data[data.length - 1];
 
   return (
-    <svg width={width} height={height} style={{ display: "block" }}>
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="none"
+      style={{ display: "block", width: "100%", height }}
+    >
       {/* baseline */}
       <line
         x1={pad}
@@ -135,9 +139,18 @@ function Sparkline({ data, peakDate, state, width = 320, height = 80 }: Sparklin
 
 // ─── Domino Card ──────────────────────────────────────────────────────────────
 
+const SHORT_LABELS: Record<string, string> = {
+  newSales: "New Sales",
+  permits: "Permits",
+  underConstruction: "Building",
+  constructionJobs: "Jobs",
+  homePrices: "Prices",
+};
+
 function DominoCard({ d, index }: { d: DominoStatus; index: number }) {
   const c = STATE_COLORS[d.state] ?? STATE_COLORS.expanding;
-  const stateLabel = d.state === "fallen" ? "FALLEN" : d.state === "rolling_over" ? "ROLLING OVER" : "EXPANDING";
+  const stateLabel = d.state === "fallen" ? "FALLEN" : d.state === "rolling_over" ? "ROLLING" : "OK";
+  const shortLabel = SHORT_LABELS[d.id] ?? d.label;
 
   return (
     <div
@@ -146,149 +159,86 @@ function DominoCard({ d, index }: { d: DominoStatus; index: number }) {
         minWidth: 0,
         background: c.bg,
         border: `1px solid ${c.border}`,
-        borderRadius: 8,
-        padding: "16px 18px",
+        borderRadius: 10,
+        padding: "18px 20px",
         display: "flex",
         flexDirection: "column",
-        gap: 12,
+        gap: 14,
       }}
       data-testid={`domino-${d.id}`}
     >
-      {/* Header row */}
+      {/* Step number + name + status pill */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-          <div
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0 }}>
+          <span
             style={{
-              width: 26,
-              height: 26,
-              borderRadius: 6,
-              background: "rgba(0,0,0,0.4)",
-              border: `1px solid ${c.border}`,
-              color: c.fg,
+              color: "rgba(180,180,200,0.45)",
               fontFamily: "'JetBrains Mono', monospace",
-              fontSize: 13,
-              fontWeight: 700,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
+              fontSize: 14,
+              fontWeight: 600,
             }}
           >
             {index + 1}
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <div
-              style={{
-                color: "rgba(225,230,240,0.95)",
-                fontFamily: "'Inter', sans-serif",
-                fontSize: 14,
-                fontWeight: 600,
-                letterSpacing: "-0.01em",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              {d.label}
-            </div>
-            <div
-              style={{
-                color: "rgba(180,180,200,0.5)",
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: 11,
-                letterSpacing: "0.05em",
-              }}
-            >
-              {d.series}
-            </div>
-          </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-          <div style={{ width: 9, height: 9, borderRadius: "50%", background: c.dot }} />
+          </span>
           <span
             style={{
-              color: c.fg,
-              fontFamily: "'JetBrains Mono', monospace",
-              fontSize: 11,
-              letterSpacing: "0.06em",
-              fontWeight: 700,
+              color: "rgba(230,235,245,0.98)",
+              fontFamily: "'Inter', sans-serif",
+              fontSize: 18,
+              fontWeight: 600,
+              letterSpacing: "-0.01em",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
             }}
           >
-            {stateLabel}
+            {shortLabel}
           </span>
         </div>
-      </div>
-
-      {/* Big % off peak */}
-      <div>
-        <div
+        <span
           style={{
-            color: "rgba(180,180,200,0.5)",
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: 10,
-            letterSpacing: "0.08em",
-          }}
-        >
-          % OFF 24-MO PEAK
-        </div>
-        <div
-          style={{
-            color: c.fg,
+            background: c.dot,
+            color: "#0A0A0D",
             fontFamily: "'Inter', sans-serif",
-            fontSize: 26,
-            fontWeight: 700,
-            letterSpacing: "-0.02em",
-            lineHeight: 1.1,
+            fontSize: 10,
+            fontWeight: 800,
+            letterSpacing: "0.08em",
+            padding: "3px 8px",
+            borderRadius: 4,
+            flexShrink: 0,
           }}
         >
-          {fmtPct(d.pctOffPeak)}
-        </div>
-        <div
-          style={{
-            color: "rgba(180,180,200,0.55)",
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: 11,
-            marginTop: 2,
-          }}
-        >
-          {d.monthsSincePeak ?? "—"} months since peak
-        </div>
+          {stateLabel}
+        </span>
       </div>
 
-      {/* Stats grid */}
+      {/* Hero: % off peak */}
       <div
         style={{
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr",
-          rowGap: 5,
-          columnGap: 12,
-          fontFamily: "'JetBrains Mono', monospace",
-          fontSize: 12,
+          color: c.fg,
+          fontFamily: "'Inter', sans-serif",
+          fontSize: 36,
+          fontWeight: 700,
+          letterSpacing: "-0.025em",
+          lineHeight: 1,
         }}
       >
-        <div style={{ color: "rgba(180,180,200,0.5)" }}>3-mo Δ</div>
-        <div style={{ color: "rgba(225,230,240,0.9)", textAlign: "right" }}>{fmtPct(d.roc3m)}</div>
-        <div style={{ color: "rgba(180,180,200,0.5)" }}>6-mo Δ</div>
-        <div style={{ color: "rgba(225,230,240,0.9)", textAlign: "right" }}>{fmtPct(d.roc6m)}</div>
+        {fmtPct(d.pctOffPeak)}
       </div>
 
-      {/* Sparkline */}
-      <div>
-        <Sparkline data={d.data} peakDate={d.peakDate} state={d.state} width={320} height={70} />
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            color: "rgba(180,180,200,0.5)",
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: 10,
-            marginTop: 4,
-          }}
-        >
-          <span>peak {fmtMonth(d.peakDate)} · {fmtNum(d.peakValue)}</span>
-          <span>now {fmtMonth(d.currentDate)} · {fmtNum(d.current)}</span>
-        </div>
+      <div
+        style={{
+          color: "rgba(180,180,200,0.55)",
+          fontFamily: "'Inter', sans-serif",
+          fontSize: 13,
+          marginTop: -6,
+        }}
+      >
+        from peak · {d.monthsSincePeak ?? "—"} mo ago
       </div>
+
+      {/* Sparkline only — no extra stats grid */}
+      <Sparkline data={d.data} peakDate={d.peakDate} state={d.state} width={300} height={56} />
     </div>
   );
 }
@@ -334,49 +284,117 @@ export default function HousingPage() {
         {payload && (() => {
           const fallenCount = payload.dominoes.filter((d) => d.fallen).length;
           const rollingCount = payload.dominoes.filter((d) => d.state === "rolling_over").length;
+
+          // Single-word verdict
+          let verdict: string;
+          let verdictColor: string;
+          let verdictBg: string;
+          let verdictBorder: string;
+          let plainEnglish: string;
+
+          if (!payload.sequenceValid) {
+            verdict = "FALSE START";
+            verdictColor = "#F59E0B";
+            verdictBg = "hsl(35 60% 11% / 0.7)";
+            verdictBorder = "rgba(245,160,40,0.6)";
+            plainEnglish = `${fallenCount} of 5 dominoes have fallen, but in the wrong order. ${payload.sequenceNote.replace(/[.!?]?\s*$/, ".")} Per the playbook, the chain has likely reset rather than continuing toward recession.`;
+          } else if (payload.stage >= 4) {
+            verdict = "LATE STAGE";
+            verdictColor = "#EF4444";
+            verdictBg = "hsl(0 50% 12% / 0.7)";
+            verdictBorder = "rgba(239,80,80,0.6)";
+            plainEnglish = `${payload.stage} of 5 dominoes have fallen in canonical order. ${payload.expectedTimingNote ?? "Recession risk is elevated."}`;
+          } else if (payload.stage >= 2) {
+            verdict = "ARMED";
+            verdictColor = "#F59E0B";
+            verdictBg = "hsl(35 60% 11% / 0.7)";
+            verdictBorder = "rgba(245,160,40,0.6)";
+            plainEnglish = `${payload.stage} of 5 dominoes have fallen in canonical order. ${payload.expectedTimingNote ?? "Watching the next stage of the chain."}`;
+          } else if (payload.fed.tightening) {
+            verdict = "WATCHING";
+            verdictColor = "#60A5FA";
+            verdictBg = "hsl(220 40% 11% / 0.6)";
+            verdictBorder = "rgba(96,165,250,0.4)";
+            plainEnglish = `Fed is tightening (${fmtNum(payload.fed.current, 2)}% vs ${fmtNum(payload.fed.yearAgo, 2)}% a year ago) but the housing chain hasn't started in canonical order yet.`;
+          } else {
+            verdict = "DORMANT";
+            verdictColor = "#10B981";
+            verdictBg = "hsl(160 30% 11% / 0.6)";
+            verdictBorder = "rgba(80,180,140,0.4)";
+            plainEnglish = `Fed is not tightening (${fmtNum(payload.fed.current, 2)}% vs ${fmtNum(payload.fed.yearAgo, 2)}% a year ago). The housing-led recession sequence is dormant.`;
+          }
+
           return (
-          <div style={{ display: "flex", flexDirection: "column", gap: 22, maxWidth: 1600, margin: "0 auto" }}>
-            {/* Title */}
-            <div>
-              <div
-                style={{
-                  color: "rgba(200,200,220,0.45)",
-                  fontFamily: "'JetBrains Mono', monospace",
-                  fontSize: 12,
-                  letterSpacing: "0.1em",
-                }}
-              >
-                RESIDENTIAL CONSTRUCTION CYCLE · 5-DOMINO SEQUENCE
+          <div style={{ display: "flex", flexDirection: "column", gap: 28, maxWidth: 1600, margin: "0 auto" }}>
+            {/* Verdict banner */}
+            <div
+              style={{
+                background: verdictBg,
+                border: `1px solid ${verdictBorder}`,
+                borderRadius: 12,
+                padding: "26px 30px",
+                display: "flex",
+                gap: 32,
+                alignItems: "center",
+              }}
+              data-testid="verdict-banner"
+            >
+              <div style={{ flexShrink: 0 }}>
+                <div
+                  style={{
+                    color: "rgba(180,180,200,0.5)",
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 11,
+                    letterSpacing: "0.12em",
+                  }}
+                >
+                  HOUSING CYCLE
+                </div>
+                <div
+                  style={{
+                    color: verdictColor,
+                    fontFamily: "'Inter', sans-serif",
+                    fontSize: 56,
+                    fontWeight: 800,
+                    letterSpacing: "-0.03em",
+                    lineHeight: 1,
+                    marginTop: 6,
+                  }}
+                >
+                  {verdict}
+                </div>
               </div>
-              <div
-                style={{
-                  color: "rgba(225,230,240,0.98)",
-                  fontFamily: "'Inter', sans-serif",
-                  fontSize: 26,
-                  fontWeight: 700,
-                  letterSpacing: "-0.015em",
-                  marginTop: 4,
-                }}
-              >
-                Housing Cycle Tracker
-              </div>
-              <div
-                style={{
-                  color: "rgba(180,180,200,0.6)",
-                  fontFamily: "'Inter', sans-serif",
-                  fontSize: 14,
-                  marginTop: 4,
-                  lineHeight: 1.5,
-                  maxWidth: 900,
-                }}
-              >
-                Watches the construction cycle in canonical order — sales → permits → under construction →
-                construction employment → home prices. Home prices fall last; the earlier dominoes are the
-                predictive ones.
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    color: "rgba(225,230,240,0.92)",
+                    fontFamily: "'Inter', sans-serif",
+                    fontSize: 17,
+                    lineHeight: 1.5,
+                    fontWeight: 400,
+                  }}
+                >
+                  {plainEnglish}
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 24,
+                    marginTop: 14,
+                    color: "rgba(180,180,200,0.65)",
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 13,
+                  }}
+                >
+                  <span>{fallenCount} fallen · {rollingCount} rolling · {5 - fallenCount - rollingCount} ok</span>
+                  <span>Fed funds {fmtNum(payload.fed.current, 2)}%</span>
+                  <span>Stage {payload.stage}/5 in order</span>
+                </div>
               </div>
             </div>
 
-            {/* Top stat row: Fed gate + Fallen count + Stage + Sequence integrity */}
+            {/* HIDDEN: legacy stat row (kept structure for future re-add) */}
+            <div style={{ display: "none" }}>
             <div style={{ display: "grid", gridTemplateColumns: "1.1fr 0.9fr 1.6fr 1.2fr", gap: 14 }}>
               {/* Fed gate */}
               <div
@@ -636,6 +654,37 @@ export default function HousingPage() {
                 </div>
               </div>
             </div>
+            </div>
+
+            {/* Section label for dominoes */}
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: -8,
+              }}
+            >
+              <div
+                style={{
+                  color: "rgba(180,180,200,0.5)",
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: 12,
+                  letterSpacing: "0.12em",
+                }}
+              >
+                THE 5 DOMINOES · CANONICAL ORDER LEFT → RIGHT
+              </div>
+              <div
+                style={{
+                  color: "rgba(180,180,200,0.45)",
+                  fontFamily: "'Inter', sans-serif",
+                  fontSize: 12,
+                }}
+              >
+                Sales lead, prices follow last
+              </div>
+            </div>
 
             {/* Domino row */}
             <div style={{ display: "flex", gap: 14, alignItems: "stretch" }}>
@@ -644,21 +693,17 @@ export default function HousingPage() {
               ))}
             </div>
 
-            {/* Footer note */}
+            {/* Footer note — single line */}
             <div
               style={{
-                color: "rgba(180,180,200,0.45)",
+                color: "rgba(180,180,200,0.4)",
                 fontFamily: "'JetBrains Mono', monospace",
                 fontSize: 11,
-                lineHeight: 1.6,
+                lineHeight: 1.5,
+                marginTop: 4,
               }}
             >
-              Source: FRED (HSN1F · PERMIT · UNDCONTSA · CES2023600001 · CSUSHPINSA · FEDFUNDS). A domino is
-              "fallen" when it peaked ≥ 3 months ago, is ≥ 5% below that peak, and the 3-month rate of change
-              is negative. <strong style={{ color: "rgba(220,225,235,0.7)" }}>Stage</strong> counts only
-              <em> consecutively from the first series</em> — that's why it can stay at 0 even when later
-              dominoes are red. <strong style={{ color: "rgba(220,225,235,0.7)" }}>Dominoes Fallen</strong> is
-              the raw count regardless of order.
+              FRED data · "fallen" = ≥3 months past peak, ≥5% below peak, 3-mo trend negative
             </div>
           </div>
           );
