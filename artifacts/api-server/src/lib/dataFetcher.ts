@@ -65,9 +65,10 @@ function getFridays(start: Date, end: Date): Date[] {
 }
 
 // Fetch FRED monthly series → date string → value
-async function fetchFredMonthly(series: string): Promise<Map<string, number>> {
+async function fetchFredMonthly(series: string, units?: string): Promise<Map<string, number>> {
   if (!FRED_KEY) throw new Error("FRED_API_KEY not set");
-  const url = `${FRED_BASE}?series_id=${series}&api_key=${FRED_KEY}&file_type=json&observation_start=1959-01-01&frequency=m`;
+  const unitsParam = units ? `&units=${units}` : "";
+  const url = `${FRED_BASE}?series_id=${series}&api_key=${FRED_KEY}&file_type=json&observation_start=1959-01-01&frequency=m${unitsParam}`;
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(`FRED error ${resp.status} for ${series}`);
   const json = (await resp.json()) as { observations: Array<{ date: string; value: string }> };
@@ -184,11 +185,12 @@ export async function fetchAndCompute(): Promise<ChartPayload> {
   logger.info("Fetching FRED data...");
 
   // Fetch all series in parallel
-  const [unrateMap, fedfundsMap, cpiauscslMap, m2slMap, usrecMap, oilMap, dgs10Map, t10y2yMap, wm2nsMap] =
+  const [unrateMap, fedfundsMap, cpiauscslMap, cpiYoYMap, m2slMap, usrecMap, oilMap, dgs10Map, t10y2yMap, wm2nsMap] =
     await Promise.all([
       fetchFredMonthly("UNRATE"),
       fetchFredMonthly("FEDFUNDS"),
       fetchFredMonthly("CPIAUCSL"),
+      fetchFredMonthly("CPIAUCSL", "pc1"),
       fetchFredMonthly("M2SL"),
       fetchFredMonthly("USREC"),
       fetchFredWeekly("DCOILWTICO"),
@@ -209,6 +211,7 @@ export async function fetchAndCompute(): Promise<ChartPayload> {
   const unrateWeekly = forwardFill(unrateMap, fridays);
   const fedfundsWeekly = forwardFill(fedfundsMap, fridays);
   const cpiauscslWeekly = forwardFill(cpiauscslMap, fridays);
+  const cpiYoYWeekly = forwardFill(cpiYoYMap, fridays);
   const m2slWeekly = forwardFill(m2slMap, fridays);
   const usrecWeekly = forwardFill(usrecMap, fridays);
 
@@ -291,7 +294,7 @@ export async function fetchAndCompute(): Promise<ChartPayload> {
       dgs10: mapToSeries(dgs10Weekly),
       t10y2y: mapToSeries(t10y2yWeekly),
       btc: mapToSeries(btcWeekly),
-      cpi: mapToSeries(cpiauscslWeekly),
+      cpi: mapToSeries(cpiYoYWeekly),
     },
     lastUpdated: Math.floor(Date.now() / 1000),
   };
