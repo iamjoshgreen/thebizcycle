@@ -12,6 +12,7 @@ const TABS: { path: string; label: string }[] = [
   { path: "/fractal", label: "Fractal Overlay" },
   { path: "/channel", label: "Channel" },
   { path: "/housing", label: "Housing" },
+  { path: "/recession", label: "Recession" },
 ];
 
 function formatTimestamp(unix: number): string {

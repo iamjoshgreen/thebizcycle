@@ -101,3 +101,78 @@ export interface HousingPayload {
   sequenceNote: string;
   lastUpdated: number;
 }
+
+export type SectorStatsId = (typeof SectorStatsId)[keyof typeof SectorStatsId];
+
+export const SectorStatsId = {
+  residentialConstruction: "residentialConstruction",
+  durableGoods: "durableGoods",
+  totalConstruction: "totalConstruction",
+  totalManufacturing: "totalManufacturing",
+} as const;
+
+export type SectorStatsRole =
+  (typeof SectorStatsRole)[keyof typeof SectorStatsRole];
+
+export const SectorStatsRole = {
+  leader: "leader",
+  confirmation: "confirmation",
+} as const;
+
+export type SectorStatsStatus =
+  (typeof SectorStatsStatus)[keyof typeof SectorStatsStatus];
+
+export const SectorStatsStatus = {
+  expansion: "expansion",
+  warning: "warning",
+  signal: "signal",
+  insufficient: "insufficient",
+} as const;
+
+export interface SectorStats {
+  id: SectorStatsId;
+  label: string;
+  series: string;
+  role: SectorStatsRole;
+  current: number | null;
+  currentDate: number | null;
+  peakValue: number | null;
+  peakDate: number | null;
+  pctOffPeak: number | null;
+  monthsSincePeak: number | null;
+  yoyPct: number | null;
+  ann3mPct: number | null;
+  status: SectorStatsStatus;
+}
+
+export interface NberRecessionInterval {
+  start: number;
+  end: number;
+}
+
+export type RecessionPayloadCjiStatus =
+  (typeof RecessionPayloadCjiStatus)[keyof typeof RecessionPayloadCjiStatus];
+
+export const RecessionPayloadCjiStatus = {
+  expansion: "expansion",
+  warning: "warning",
+  signal: "signal",
+  insufficient: "insufficient",
+} as const;
+
+export interface RecessionPayload {
+  cji: number | null;
+  cjiStatus: RecessionPayloadCjiStatus;
+  cjiLabel: string;
+  cjiBlurb: string;
+  confirmedRed: boolean;
+  sectors: SectorStats[];
+  cjiHistory: MonthlyPoint[];
+  nberRecessions: NberRecessionInterval[];
+  payemsYoY: MonthlyPoint[];
+  dataAsOf: number | null;
+  lastFredDate: number | null;
+  partialData: boolean;
+  notes: string[];
+  lastUpdated: number;
+}

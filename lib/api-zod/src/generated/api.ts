@@ -265,3 +265,116 @@ export const RefreshHousingResponse = zod.object({
   sequenceNote: zod.string(),
   lastUpdated: zod.number(),
 });
+
+/**
+ * Returns CJI, per-sector stats, historical CJI, NBER recession periods, and PAYEMS YoY context series
+ * @summary Get recession indicator payload
+ */
+export const GetRecessionResponse = zod.object({
+  cji: zod.number().nullable(),
+  cjiStatus: zod.enum(["expansion", "warning", "signal", "insufficient"]),
+  cjiLabel: zod.string(),
+  cjiBlurb: zod.string(),
+  confirmedRed: zod.boolean(),
+  sectors: zod.array(
+    zod.object({
+      id: zod.enum([
+        "residentialConstruction",
+        "durableGoods",
+        "totalConstruction",
+        "totalManufacturing",
+      ]),
+      label: zod.string(),
+      series: zod.string(),
+      role: zod.enum(["leader", "confirmation"]),
+      current: zod.number().nullable(),
+      currentDate: zod.number().nullable(),
+      peakValue: zod.number().nullable(),
+      peakDate: zod.number().nullable(),
+      pctOffPeak: zod.number().nullable(),
+      monthsSincePeak: zod.number().nullable(),
+      yoyPct: zod.number().nullable(),
+      ann3mPct: zod.number().nullable(),
+      status: zod.enum(["expansion", "warning", "signal", "insufficient"]),
+    }),
+  ),
+  cjiHistory: zod.array(
+    zod.object({
+      time: zod.number(),
+      value: zod.number(),
+    }),
+  ),
+  nberRecessions: zod.array(
+    zod.object({
+      start: zod.number(),
+      end: zod.number(),
+    }),
+  ),
+  payemsYoY: zod.array(
+    zod.object({
+      time: zod.number(),
+      value: zod.number(),
+    }),
+  ),
+  dataAsOf: zod.number().nullable(),
+  lastFredDate: zod.number().nullable(),
+  partialData: zod.boolean(),
+  notes: zod.array(zod.string()),
+  lastUpdated: zod.number(),
+});
+
+/**
+ * @summary Force refresh recession data
+ */
+export const RefreshRecessionResponse = zod.object({
+  cji: zod.number().nullable(),
+  cjiStatus: zod.enum(["expansion", "warning", "signal", "insufficient"]),
+  cjiLabel: zod.string(),
+  cjiBlurb: zod.string(),
+  confirmedRed: zod.boolean(),
+  sectors: zod.array(
+    zod.object({
+      id: zod.enum([
+        "residentialConstruction",
+        "durableGoods",
+        "totalConstruction",
+        "totalManufacturing",
+      ]),
+      label: zod.string(),
+      series: zod.string(),
+      role: zod.enum(["leader", "confirmation"]),
+      current: zod.number().nullable(),
+      currentDate: zod.number().nullable(),
+      peakValue: zod.number().nullable(),
+      peakDate: zod.number().nullable(),
+      pctOffPeak: zod.number().nullable(),
+      monthsSincePeak: zod.number().nullable(),
+      yoyPct: zod.number().nullable(),
+      ann3mPct: zod.number().nullable(),
+      status: zod.enum(["expansion", "warning", "signal", "insufficient"]),
+    }),
+  ),
+  cjiHistory: zod.array(
+    zod.object({
+      time: zod.number(),
+      value: zod.number(),
+    }),
+  ),
+  nberRecessions: zod.array(
+    zod.object({
+      start: zod.number(),
+      end: zod.number(),
+    }),
+  ),
+  payemsYoY: zod.array(
+    zod.object({
+      time: zod.number(),
+      value: zod.number(),
+    }),
+  ),
+  dataAsOf: zod.number().nullable(),
+  lastFredDate: zod.number().nullable(),
+  partialData: zod.boolean(),
+  notes: zod.array(zod.string()),
+  lastUpdated: zod.number(),
+});

@@ -16,7 +16,12 @@ import type {
   UseQueryResult,
 } from "@tanstack/react-query";
 
-import type { ChartPayload, HealthStatus, HousingPayload } from "./api.schemas";
+import type {
+  ChartPayload,
+  HealthStatus,
+  HousingPayload,
+  RecessionPayload,
+} from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
 import type { ErrorType } from "../custom-fetch";
@@ -408,4 +413,161 @@ export const useRefreshHousing = <
   TContext
 > => {
   return useMutation(getRefreshHousingMutationOptions(options));
+};
+
+/**
+ * Returns CJI, per-sector stats, historical CJI, NBER recession periods, and PAYEMS YoY context series
+ * @summary Get recession indicator payload
+ */
+export const getGetRecessionUrl = () => {
+  return `/api/recession`;
+};
+
+export const getRecession = async (
+  options?: RequestInit,
+): Promise<RecessionPayload> => {
+  return customFetch<RecessionPayload>(getGetRecessionUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetRecessionQueryKey = () => {
+  return [`/api/recession`] as const;
+};
+
+export const getGetRecessionQueryOptions = <
+  TData = Awaited<ReturnType<typeof getRecession>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getRecession>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetRecessionQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getRecession>>> = ({
+    signal,
+  }) => getRecession({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getRecession>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetRecessionQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getRecession>>
+>;
+export type GetRecessionQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get recession indicator payload
+ */
+
+export function useGetRecession<
+  TData = Awaited<ReturnType<typeof getRecession>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getRecession>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetRecessionQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Force refresh recession data
+ */
+export const getRefreshRecessionUrl = () => {
+  return `/api/recession/refresh`;
+};
+
+export const refreshRecession = async (
+  options?: RequestInit,
+): Promise<RecessionPayload> => {
+  return customFetch<RecessionPayload>(getRefreshRecessionUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRefreshRecessionMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof refreshRecession>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof refreshRecession>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["refreshRecession"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof refreshRecession>>,
+    void
+  > = () => {
+    return refreshRecession(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RefreshRecessionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof refreshRecession>>
+>;
+
+export type RefreshRecessionMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Force refresh recession data
+ */
+export const useRefreshRecession = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof refreshRecession>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof refreshRecession>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getRefreshRecessionMutationOptions(options));
 };

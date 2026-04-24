@@ -82,6 +82,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/HousingPayload"
 
+  /recession:
+    get:
+      operationId: getRecession
+      tags: [recession]
+      summary: Get recession indicator payload
+      description: Returns CJI, per-sector stats, historical CJI, NBER recession periods, and PAYEMS YoY context series
+      responses:
+        "200":
+          description: Recession payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecessionPayload"
+
+  /recession/refresh:
+    post:
+      operationId: refreshRecession
+      tags: [recession]
+      summary: Force refresh recession data
+      responses:
+        "200":
+          description: Refreshed recession payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecessionPayload"
+
 components:
   schemas:
     HealthStatus:
@@ -305,4 +332,133 @@ components:
         - expectedTimingNote
         - sequenceValid
         - sequenceNote
+        - lastUpdated
+
+    SectorStats:
+      type: object
+      properties:
+        id:
+          type: string
+          enum:
+            - residentialConstruction
+            - durableGoods
+            - totalConstruction
+            - totalManufacturing
+        label:
+          type: string
+        series:
+          type: string
+        role:
+          type: string
+          enum: [leader, confirmation]
+        current:
+          type: number
+          nullable: true
+        currentDate:
+          type: number
+          nullable: true
+        peakValue:
+          type: number
+          nullable: true
+        peakDate:
+          type: number
+          nullable: true
+        pctOffPeak:
+          type: number
+          nullable: true
+        monthsSincePeak:
+          type: number
+          nullable: true
+        yoyPct:
+          type: number
+          nullable: true
+        ann3mPct:
+          type: number
+          nullable: true
+        status:
+          type: string
+          enum: [expansion, warning, signal, insufficient]
+      required:
+        - id
+        - label
+        - series
+        - role
+        - current
+        - currentDate
+        - peakValue
+        - peakDate
+        - pctOffPeak
+        - monthsSincePeak
+        - yoyPct
+        - ann3mPct
+        - status
+
+    NberRecessionInterval:
+      type: object
+      properties:
+        start:
+          type: number
+        end:
+          type: number
+      required: [start, end]
+
+    RecessionPayload:
+      type: object
+      properties:
+        cji:
+          type: number
+          nullable: true
+        cjiStatus:
+          type: string
+          enum: [expansion, warning, signal, insufficient]
+        cjiLabel:
+          type: string
+        cjiBlurb:
+          type: string
+        confirmedRed:
+          type: boolean
+        sectors:
+          type: array
+          items:
+            $ref: "#/components/schemas/SectorStats"
+        cjiHistory:
+          type: array
+          items:
+            $ref: "#/components/schemas/MonthlyPoint"
+        nberRecessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/NberRecessionInterval"
+        payemsYoY:
+          type: array
+          items:
+            $ref: "#/components/schemas/MonthlyPoint"
+        dataAsOf:
+          type: number
+          nullable: true
+        lastFredDate:
+          type: number
+          nullable: true
+        partialData:
+          type: boolean
+        notes:
+          type: array
+          items:
+            type: string
+        lastUpdated:
+          type: number
+      required:
+        - cji
+        - cjiStatus
+        - cjiLabel
+        - cjiBlurb
+        - confirmedRed
+        - sectors
+        - cjiHistory
+        - nberRecessions
+        - payemsYoY
+        - dataAsOf
+        - lastFredDate
+        - partialData
+        - notes
         - lastUpdated
