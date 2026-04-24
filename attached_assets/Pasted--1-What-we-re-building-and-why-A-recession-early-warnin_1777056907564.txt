@@ -1,0 +1,49 @@
+**1. What we're building and why**
+
+A recession early-warning indicator based on the only two labor market sectors that reliably lead recessions: Residential Construction and Durable Goods Manufacturing.
+
+Why: The headline jobs number (158M payrolls) treats every job as equal, so recession signals get buried by non-cyclical sectors like healthcare and education that almost never contract. Construction and manufacturing are only 13% of private payrolls but account for up to 100% of job losses during recessions, and they turn down 9-29 months before the recession officially starts. By isolating just these sectors, you get a clean leading signal instead of a lagging confirmation.
+
+**2. What info we're gathering and why**
+
+Five FRED series:
+
+- **CES2023610001 (Residential Building Construction)** — the single most cyclical, interest-rate-sensitive slice of the labor market. Turns first.
+- **DMANEMP (Durable Goods Manufacturing)** — larger and more cyclical than non-durables. Longest average lead time (29 months).
+- **USCONS (Total Construction)** — confirmation layer for Residential.
+- **MANEMP (Total Manufacturing)** — confirmation layer for Durable Goods.
+- **PAYEMS (Total Nonfarm)** — context only, to show how late the headline number fires vs. the cyclical signal.
+
+Per series we compute: current value, trailing 60-month peak, % off peak, months since peak, YoY %, and 3-month annualized %. The % off peak tells you if the sector has rolled over. The 3-month annualized catches turns faster than YoY. Months since peak tells you where you are in the lead-time window.
+
+**3. What the gathered info means**
+
+We combine the two leading sectors into one headline number:
+
+```
+CJI = average(% off peak of Residential Construction, % off peak of Durable Goods)
+```
+
+Interpretation:
+
+- **CJI ≥ -0.5%** → Both cyclical leaders at or near peak. No recession signal. Expansion intact.
+- **CJI between -0.5% and -1.5%** → Rollover starting. Historically this zone is where the recession clock starts. Expect recession in 9-29 months, not immediately.
+- **CJI ≤ -1.5%** → Confirmed rollover. Recession signal is firing. Based on history, recession likely within the next ~12 months.
+
+Confirmation rule: Flag RED only if CJI ≤ -1.5% AND 3-month annualized is negative for both Residential Construction and Durable Goods for 2+ consecutive months. This prevents false signals from one-month noise.
+
+**4. Graphically how to interpret it**
+
+Three visual components, in this order:
+
+**A. Headline stat** — Big CJI number with status color (green/yellow/red) and a one-line label: "Expansion," "Warning," or "Recession Signal." This is the glance read.
+
+**B. Detail table** — 4 rows (Residential Construction, Durable Goods, Total Construction, Total Manufacturing), columns: Current, Peak, % Off Peak, Months Since Peak, YoY %, 3M Ann %. Color-code each row's status cell the same way. This shows you which sector is driving the signal.
+
+**C. Historical CJI line chart** — CJI on y-axis (0% at top, going negative down), time on x-axis going back 30+ years. Overlay:
+- Green horizontal band from 0% to -0.5%
+- Yellow band from -0.5% to -1.5%
+- Red band below -1.5%
+- Gray vertical shading for NBER recession periods
+
+How to read the chart: You should see the CJI line cross into yellow, then red, **before** each gray recession bar starts. That visual confirmation is what tells you the indicator works. When the current-day end of the line is in green, you're fine. When it crosses into yellow, the clock has started. When it hits red, position accordingly.
