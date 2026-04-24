@@ -444,6 +444,7 @@ export async function fetchRecessionPayload(): Promise<RecessionPayload> {
     notes.push("Total Nonfarm (PAYEMS) context series unavailable");
   }
   if (!usrecRes) {
+    partialData = true;
     notes.push("NBER recession history (USREC) unavailable — chart shading omitted");
   }
 
