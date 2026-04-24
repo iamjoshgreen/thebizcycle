@@ -70,11 +70,12 @@ export default function TopBar({ lastUpdated, isRefreshing, onRefresh }: TopBarP
       {/* Left — title + tabs */}
       <Tabs />
 
-      {/* Center — last updated */}
-      <div className="absolute left-1/2 -translate-x-1/2">
+      {/* Right — last updated + refresh, grouped so "Updated…" never collides
+          with the tabs as they grow on wider routes. */}
+      <div className="flex items-center gap-3">
         {lastUpdated ? (
           <span
-            className="text-xs"
+            className="text-xs hidden sm:inline"
             style={{
               color: "hsl(220 10% 45%)",
               fontFamily: "'JetBrains Mono', monospace",
@@ -86,16 +87,13 @@ export default function TopBar({ lastUpdated, isRefreshing, onRefresh }: TopBarP
           </span>
         ) : (
           <span
-            className="text-xs"
+            className="text-xs hidden sm:inline"
             style={{ color: "hsl(220 10% 30%)", fontFamily: "'JetBrains Mono', monospace" }}
           >
             No data cached
           </span>
         )}
-      </div>
-
-      {/* Right — refresh */}
-      <button
+        <button
         onClick={onRefresh}
         disabled={isRefreshing}
         className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -127,6 +125,7 @@ export default function TopBar({ lastUpdated, isRefreshing, onRefresh }: TopBarP
         />
         Refresh
       </button>
+      </div>
     </header>
   );
 }
