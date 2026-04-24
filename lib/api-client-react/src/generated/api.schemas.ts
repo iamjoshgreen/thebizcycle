@@ -72,6 +72,7 @@ export type DominoStatusOrderStatus =
 export const DominoStatusOrderStatus = {
   in_order: "in_order",
   out_of_order: "out_of_order",
+  healthy: "healthy",
   pending: "pending",
 } as const;
 

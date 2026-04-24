@@ -261,7 +261,13 @@ components:
           type: boolean
         orderStatus:
           type: string
-          enum: [in_order, out_of_order, pending]
+          # "healthy" = still expanding, no order judgement.
+          # "in_order" = declining and every earlier domino started declining at
+          #              least as long ago.
+          # "out_of_order" = declining but some predecessor is still healthy or
+          #                  started declining more recently than this one.
+          # "pending" = legacy; retained so older clients still parse cleanly.
+          enum: [in_order, out_of_order, healthy, pending]
         data:
           type: array
           items:

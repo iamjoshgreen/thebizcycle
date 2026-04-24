@@ -162,11 +162,11 @@ const DOMINO_MEANING: Record<string, string> = {
     "Always the last to move. Sellers cling to old prices until they can't.",
 };
 
-// Plain-English badge for the per-card "is this in its expected position?" flag.
-// "in_order" → green ✓ "in order"
-// "out_of_order" → amber ✗ "out of order" (printed for both fallen-but-skipped
-//                  AND not-fallen-but-others-passed-it; both are sequence breaks)
-// "pending" → muted "—" (nothing to evaluate yet)
+// Plain-English badge for the per-card sequence-position flag.
+// "in_order"     → green ✓ "in order"     — declining in proper sequence
+// "out_of_order" → amber ✗ "out of order" — declined before a predecessor did
+// "healthy"      → green ✓ "healthy"      — still expanding, no judgement to make
+// "pending"      → muted — "pending"      — legacy fallback (no longer emitted)
 function OrderBadge({ status }: { status: DominoStatus["orderStatus"] }) {
   const config: Record<DominoStatus["orderStatus"], { fg: string; bg: string; border: string; icon: string; text: string }> = {
     in_order: {
@@ -182,6 +182,13 @@ function OrderBadge({ status }: { status: DominoStatus["orderStatus"] }) {
       border: "rgba(245,160,40,0.5)",
       icon: "✗",
       text: "out of order",
+    },
+    healthy: {
+      fg: "rgba(180,210,200,0.95)",
+      bg: "hsl(160 30% 12% / 0.6)",
+      border: "rgba(80,180,140,0.45)",
+      icon: "✓",
+      text: "healthy",
     },
     pending: {
       fg: "rgba(180,180,200,0.6)",

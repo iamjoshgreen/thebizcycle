@@ -10,11 +10,20 @@ export interface MonthlyPoint {
 
 export type DominoState = "expanding" | "rolling_over" | "fallen";
 
-// "in_order" — fallen and every earlier domino has also fallen (proper sequence)
-// "out_of_order" — fallen but an earlier domino hasn't (skipped a step)
-//                  OR not fallen but a later domino has (the missing step)
-// "pending" — not fallen, and nothing later has fallen either (still expected)
-export type OrderStatus = "in_order" | "out_of_order" | "pending";
+// Per-domino sequence-position flag. Sequence is causal: each domino is supposed
+// to fall *because* the previous one fell, so "out of order" means this domino
+// started declining before one of its predecessors did.
+//
+// - "healthy"      — still expanding (hasn't peaked / hasn't started declining).
+//                    Not evaluated for order; it has nothing to violate yet.
+// - "in_order"     — has started declining (rolling_over or fallen) AND every
+//                    earlier domino started declining at least as long ago.
+// - "out_of_order" — has started declining BUT some earlier domino is still
+//                    healthy, OR some earlier domino started declining MORE
+//                    RECENTLY than this one (i.e. this one fell first).
+// - "pending"      — kept for backward compatibility with the generated client;
+//                    no longer emitted by the new logic.
+export type OrderStatus = "in_order" | "out_of_order" | "healthy" | "pending";
 
 export interface DominoStatus {
   id: "newSales" | "permits" | "underConstruction" | "employment" | "homePrices";
@@ -156,28 +165,50 @@ function computeDomino(
   };
 }
 
-// Per-domino "is this in its expected position?" flag. Computed across the
-// whole canonical-order array because the answer depends on neighbors.
+// Per-domino sequence-position flag. The sequence is causal: each domino is
+// supposed to fall because the previous one fell, so a domino is "out of order"
+// if it started declining before one of its predecessors did.
+//
+// "Started declining" = state is rolling_over OR fallen (anything past peak).
+// "Healthy" = state is expanding (still at or near a fresh high).
+//
+// Rules, applied per-domino:
+//   1. If this domino is still healthy → "healthy" (no order judgement yet).
+//   2. If this is the first domino → "in_order" (no predecessor to violate).
+//   3. Otherwise, scan every earlier domino:
+//        - if any earlier domino is still healthy → this fell first → "out_of_order"
+//        - if any earlier domino has a SMALLER monthsSincePeak than this one,
+//          that means the earlier domino started declining MORE RECENTLY (i.e.
+//          this one fell before it) → "out_of_order"
+//   4. Otherwise → "in_order".
 function computeOrderStatuses(dominoes: DominoStatus[]): OrderStatus[] {
-  // Identify the highest-index domino that has fallen. Anything before it that
-  // has NOT fallen is the "missing step" — out of order. Anything fallen up to
-  // (and including) that index that came after a non-fallen earlier one is
-  // also out of order.
-  const lastFallenIdx = (() => {
-    for (let i = dominoes.length - 1; i >= 0; i--) if (dominoes[i].fallen) return i;
-    return -1;
-  })();
   return dominoes.map((d, i) => {
-    if (d.fallen) {
-      // Fallen → in order only if EVERY earlier domino has also fallen.
-      for (let j = 0; j < i; j++) {
-        if (!dominoes[j].fallen) return "out_of_order";
+    // 1. Still healthy — nothing to evaluate.
+    if (d.state === "expanding") return "healthy";
+
+    // 2. First domino can't be out of order — no predecessor exists.
+    if (i === 0) return "in_order";
+
+    // 3. Compare against every earlier domino.
+    const myMonths = d.monthsSincePeak;
+    for (let j = 0; j < i; j++) {
+      const earlier = dominoes[j];
+      // 3a. Earlier domino is still healthy → this one moved first → out of order.
+      if (earlier.state === "expanding") return "out_of_order";
+      // 3b. Earlier domino started declining MORE RECENTLY than this one.
+      //     Smaller monthsSincePeak = peaked later = started falling later.
+      //     If we don't know either side's monthsSincePeak, skip the check.
+      if (
+        earlier.monthsSincePeak != null &&
+        myMonths != null &&
+        earlier.monthsSincePeak < myMonths
+      ) {
+        return "out_of_order";
       }
-      return "in_order";
     }
-    // Not fallen → out of order if a later domino has fallen (skipped step),
-    // otherwise just pending.
-    return i < lastFallenIdx ? "out_of_order" : "pending";
+
+    // 4. Every earlier domino started declining at least as long ago — sequence intact.
+    return "in_order";
   });
 }
 

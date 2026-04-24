@@ -196,7 +196,7 @@ export const GetHousingResponse = zod.object({
       roc6m: zod.number().nullable(),
       state: zod.enum(["expanding", "rolling_over", "fallen"]),
       fallen: zod.boolean(),
-      orderStatus: zod.enum(["in_order", "out_of_order", "pending"]),
+      orderStatus: zod.enum(["in_order", "out_of_order", "healthy", "pending"]),
       data: zod.array(
         zod.object({
           time: zod.number(),
@@ -254,7 +254,7 @@ export const RefreshHousingResponse = zod.object({
       roc6m: zod.number().nullable(),
       state: zod.enum(["expanding", "rolling_over", "fallen"]),
       fallen: zod.boolean(),
-      orderStatus: zod.enum(["in_order", "out_of_order", "pending"]),
+      orderStatus: zod.enum(["in_order", "out_of_order", "healthy", "pending"]),
       data: zod.array(
         zod.object({
           time: zod.number(),
