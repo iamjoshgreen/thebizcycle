@@ -383,14 +383,14 @@ export async function fetchRecessionPayload(): Promise<RecessionPayload> {
   // cjiHistory will be empty and we degrade to "insufficient".
   let lastFredDate: number | null = null;
   let cji: number | null = null;
-  let cjiStatus: RecessionStatus = "insufficient";
+  let cjiZone: RecessionStatus = "insufficient"; // raw threshold zone — used by chart bands and the table
   let leaderAsOfRC: number | null = null;
   let leaderAsOfDG: number | null = null;
   if (cjiHistory.length > 0) {
     const last = cjiHistory[cjiHistory.length - 1];
     lastFredDate = last.time;
     cji = last.value;
-    cjiStatus = statusFromPctOffPeak(cji);
+    cjiZone = statusFromPctOffPeak(cji);
     leaderAsOfRC = indexByTime(resCons).get(last.time) ?? null;
     leaderAsOfDG = indexByTime(durGoods).get(last.time) ?? null;
   }
@@ -403,8 +403,18 @@ export async function fetchRecessionPayload(): Promise<RecessionPayload> {
     return computeSector(meta, seriesResults[i]);
   });
 
-  const confirmedRed = cjiStatus === "signal" && checkConfirmedRed(cjiHistory, resCons, durGoods);
-  const { label, blurb } = makeLabel(cjiStatus, confirmedRed);
+  const confirmedRed = cjiZone === "signal" && checkConfirmedRed(cjiHistory, resCons, durGoods);
+
+  // Headline status RESPECTS the confirmation rule. If CJI is in the red zone
+  // but the 2-consecutive-month rule has not fired, show as warning, not red.
+  // This matches the spec: RED only when CJI <= -1.5% AND both leaders' 3M
+  // annualized < 0 for 2+ consecutive months. The text label still uses the
+  // raw zone so the user sees "Recession Warning (unconfirmed)" — the color
+  // changes, but the wording remains explicit.
+  const cjiStatus: RecessionStatus =
+    cjiZone === "signal" && !confirmedRed ? "warning" : cjiZone;
+
+  const { label, blurb } = makeLabel(cjiZone, confirmedRed);
 
   const notes: string[] = [];
   let partialData = false;

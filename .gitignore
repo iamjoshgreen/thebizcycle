@@ -47,3 +47,12 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# SQLite cache files (runtime artifacts — should never be committed)
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Pasted text attachments (planning notes, not source)
+attached_assets/Pasted-*.txt

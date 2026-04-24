@@ -671,14 +671,14 @@ export default function RecessionPage() {
                     <strong
                       style={{
                         color:
-                          payload.cjiStatus === "signal"
+                          payload.cji != null && payload.cji <= -1.5
                             ? payload.confirmedRed
                               ? STATUS_COLORS.signal.fg
                               : STATUS_COLORS.warning.fg
                             : "rgba(180,180,200,0.65)",
                       }}
                     >
-                      {payload.cjiStatus !== "signal"
+                      {payload.cji == null || payload.cji > -1.5
                         ? "n/a (CJI above red zone)"
                         : payload.confirmedRed
                           ? "fired (2+ months negative on both leaders)"
