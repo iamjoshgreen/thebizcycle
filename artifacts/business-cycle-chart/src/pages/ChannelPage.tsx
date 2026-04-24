@@ -250,7 +250,7 @@ export default function ChannelPage() {
       },
       rightPriceScale: {
         borderColor: "hsl(230 10% 16%)",
-        mode: 0, // linear (matches the reference screenshot)
+        mode: 1, // log — matches Chart and Fractal pages so SPX shape is consistent everywhere
         scaleMargins: { top: 0.08, bottom: 0.08 },
       },
       crosshair: { mode: 1 },
