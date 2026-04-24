@@ -1,0 +1,23 @@
+Solid plan overall. Specific thoughts:
+Strong parts:
+
+The three-component layout (headline → table → historical chart with bands + NBER shading) is exactly right.
+Reusing the Housing page architecture (fetcher → SQLite cache → API route → OpenAPI → Orval hooks) keeps it consistent instead of inventing new patterns.
+Separate cache key from Housing. Good call.
+Including USREC for NBER shading is the right move — that's what makes the chart convincing.
+The 2-consecutive-month confirmation rule on RED prevents false-fire from single-month noise.
+
+Things worth flagging before you build:
+
+Peak window definition — You said "trailing-60-month peak" in the steps, but for the historical CJI chart going back 30+ years, you need to decide if peak is always rolling 60 months or all-time-to-date. For a live indicator, rolling 60 is better (captures cycle peaks, not ancient highs). Just make sure both the table and the historical chart use the same definition or the current-day CJI won't match the end of the chart line.
+FRED release timing — These series update monthly with the Employment Situation report (first Friday of the month, usually). The refresh endpoint won't produce new data between releases. Worth logging the last FRED release date in the payload so the UI can show "Data as of [month]" — otherwise users will hit refresh and wonder why nothing changes.
+USREC lag — NBER recession dates are declared retroactively, often 6-12+ months after the recession starts. The most recent USREC value will always be 0 even if we're currently in a recession. Fine for the historical chart, but don't use USREC for anything real-time.
+3M annualized formula — Confirm you're using ((current / value_3mo_ago)^4 - 1) × 100, not a simple ×4 extrapolation. The compounding version is the standard.
+"Context line" for PAYEMS — You said "small context line near the chart." Clarify whether that's a second line on the same chart (different y-axis since scales differ wildly) or a separate mini-chart. A second line on the same chart with dual y-axis is messier than a small secondary chart underneath showing PAYEMS YoY %. Second option is cleaner and makes the "headline turns late" point more obvious.
+Status label wording — "Recession Signal" is accurate but vague. Consider "Recession Warning — 9-29mo lead" or similar so the user doesn't misread RED as "recession now." Based on your earlier frustration with me conflating rollover with imminence, this matters.
+Out of scope is tight and correct — good discipline.
+
+Missing from the plan:
+
+Data gap handling. If FRED returns partial data (one series missing), does the endpoint 500, return null for that series, or compute CJI without it? Decide now.
+Timezone/date handling for "Months Since Peak." Use month-end dates consistently or you'll get off-by-one errors.
