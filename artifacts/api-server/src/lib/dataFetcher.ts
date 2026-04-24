@@ -151,28 +151,27 @@ export async function fetchAndCompute(): Promise<ChartPayload> {
     }),
   ]);
 
-  // Anchor each Yahoo weekly bar (dated by its Monday) to that week's Friday.
-  // If the computed Friday is in the future (mid-week query, weekend, or
-  // holiday-Monday query), drop the bar instead of stamping it with today —
-  // this avoids a fake intraweek point and prevents collisions with the
-  // prior week's already-completed Friday close.
-  function anchorToFriday(barDateRaw: Date): number | null {
+  // Anchor each Yahoo weekly bar (dated by its Monday) to that week's
+  // Friday. If the computed Friday is in the future (refresh on a Mon–Thu,
+  // a holiday Monday, etc.), anchor that in-progress bar to today so the
+  // latest available close stays visible. This is safe — today and the
+  // prior week's actual Friday are different timestamps, so the prior
+  // week's completed close is not overwritten.
+  function anchorToFriday(barDateRaw: Date): number {
     const d = new Date(barDateRaw);
     d.setHours(0, 0, 0, 0);
     const dow = d.getDay();
     if (dow !== 5) {
       d.setDate(d.getDate() + (dow === 0 ? 5 : 5 - dow));
     }
-    if (d > today) return null;
-    return toUnix(d);
+    return d > today ? toUnix(today) : toUnix(d);
   }
 
   const spxMap = new Map<number, number>();
   if (spxResult.quotes) {
     for (const q of spxResult.quotes) {
       if (q.date && q.close != null) {
-        const ts = anchorToFriday(q.date);
-        if (ts != null) spxMap.set(ts, q.close);
+        spxMap.set(anchorToFriday(q.date), q.close);
       }
     }
   }
@@ -181,8 +180,7 @@ export async function fetchAndCompute(): Promise<ChartPayload> {
   if (btcResult.quotes) {
     for (const q of btcResult.quotes) {
       if (q.date && q.close != null) {
-        const ts = anchorToFriday(q.date);
-        if (ts != null) btcMap.set(ts, q.close);
+        btcMap.set(anchorToFriday(q.date), q.close);
       }
     }
   }
