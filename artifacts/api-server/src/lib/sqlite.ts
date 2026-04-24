@@ -31,3 +31,34 @@ export function getDb(): Database.Database {
 
   return _db;
 }
+
+// One-time invalidation of stale cache entries when the data-fetching logic
+// changes. Bump CACHE_BUST_VERSION whenever a fix changes the *meaning* of
+// cached values (e.g. the period2 fix that made today's SPX close visible).
+// Each version runs at most once per database.
+const CACHE_BUST_VERSION = "v2_period2_fix_2026_04";
+// Only invalidate caches whose meaning changed with this fix. The
+// recession_payload/housing_payload caches use FRED data (unaffected).
+const CACHE_BUST_KEYS = ["chart_payload"];
+
+export function runCacheBustIfNeeded(): void {
+  const db = getDb();
+  const row = db
+    .prepare("SELECT value FROM cache WHERE key = ?")
+    .get("__cache_bust_version") as { value: string } | undefined;
+  if (row?.value === CACHE_BUST_VERSION) return;
+
+  const now = Math.floor(Date.now() / 1000);
+  const del = db.prepare("DELETE FROM cache WHERE key = ?");
+  let deleted = 0;
+  for (const k of CACHE_BUST_KEYS) {
+    deleted += del.run(k).changes;
+  }
+  db.prepare(
+    "INSERT OR REPLACE INTO cache (key, value, updated_at) VALUES (?, ?, ?)"
+  ).run("__cache_bust_version", CACHE_BUST_VERSION, now);
+  // Use console here rather than the pino logger to avoid an import cycle
+  console.log(
+    `[sqlite] Cache bust ${CACHE_BUST_VERSION}: removed ${deleted} stale cache row(s)`
+  );
+}

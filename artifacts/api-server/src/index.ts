@@ -1,5 +1,9 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { runCacheBustIfNeeded } from "./lib/sqlite";
+
+// Invalidate cached payloads whose meaning changed with the latest fix
+runCacheBustIfNeeded();
 
 const rawPort = process.env["PORT"];
 

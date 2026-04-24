@@ -130,57 +130,74 @@ export async function fetchAndCompute(): Promise<ChartPayload> {
   today.setHours(0, 0, 0, 0);
   const startDate = new Date("1959-01-02");
 
-  // Include the current partial week so the latest close is always visible
+  // period2 must extend past today's market session, otherwise Yahoo cuts
+  // off the current trading day entirely (period2 is interpreted as the
+  // *start* of the day in UTC). Use tomorrow's date so today's close is
+  // always included as soon as Yahoo publishes it.
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const period2 = tomorrow.toISOString().slice(0, 10);
+
   const [spxResult, btcResult] = await Promise.all([
     yahooFinance.chart("^GSPC", {
       period1: "1959-01-01",
-      period2: today.toISOString().slice(0, 10),
+      period2,
       interval: "1wk",
     }),
     yahooFinance.chart("BTC-USD", {
       period1: "2010-01-01",
-      period2: today.toISOString().slice(0, 10),
+      period2,
       interval: "1wk",
     }),
   ]);
+
+  // Anchor each Yahoo weekly bar (dated by its Monday) to that week's Friday.
+  // If the computed Friday is in the future (mid-week query, weekend, or
+  // holiday-Monday query), drop the bar instead of stamping it with today —
+  // this avoids a fake intraweek point and prevents collisions with the
+  // prior week's already-completed Friday close.
+  function anchorToFriday(barDateRaw: Date): number | null {
+    const d = new Date(barDateRaw);
+    d.setHours(0, 0, 0, 0);
+    const dow = d.getDay();
+    if (dow !== 5) {
+      d.setDate(d.getDate() + (dow === 0 ? 5 : 5 - dow));
+    }
+    if (d > today) return null;
+    return toUnix(d);
+  }
 
   const spxMap = new Map<number, number>();
   if (spxResult.quotes) {
     for (const q of spxResult.quotes) {
       if (q.date && q.close != null) {
-        const barDate = new Date(q.date);
-        barDate.setHours(0, 0, 0, 0);
-
-        // Advance Yahoo's Monday bar date to the Friday of that week,
-        // but never past today (keeps current partial week grounded)
-        const d = new Date(barDate);
-        const dow = d.getDay();
-        if (dow !== 5) {
-          d.setDate(d.getDate() + (dow === 0 ? 5 : 5 - dow));
-        }
-        // If the computed Friday is in the future, anchor to today
-        const ts = d > today ? toUnix(today) : toUnix(d);
-        spxMap.set(ts, q.close);
+        const ts = anchorToFriday(q.date);
+        if (ts != null) spxMap.set(ts, q.close);
       }
     }
   }
 
-  // Build BTC price map (same Friday-alignment logic as SPX)
   const btcMap = new Map<number, number>();
   if (btcResult.quotes) {
     for (const q of btcResult.quotes) {
       if (q.date && q.close != null) {
-        const barDate = new Date(q.date);
-        barDate.setHours(0, 0, 0, 0);
-        const d = new Date(barDate);
-        const dow = d.getDay();
-        if (dow !== 5) d.setDate(d.getDate() + (dow === 0 ? 5 : 5 - dow));
-        const ts = d > today ? toUnix(today) : toUnix(d);
-        btcMap.set(ts, q.close);
+        const ts = anchorToFriday(q.date);
+        if (ts != null) btcMap.set(ts, q.close);
       }
     }
   }
 
+  // Log the latest SPX close so future drift is visible in workflow logs
+  const latestSpxTs = Array.from(spxMap.keys()).sort((a, b) => b - a)[0];
+  if (latestSpxTs != null) {
+    const latestSpxDate = new Date(latestSpxTs * 1000).toISOString().slice(0, 10);
+    logger.info(`SPX latest: ${latestSpxDate} = ${spxMap.get(latestSpxTs)}`);
+  }
+  const latestBtcTs = Array.from(btcMap.keys()).sort((a, b) => b - a)[0];
+  if (latestBtcTs != null) {
+    const latestBtcDate = new Date(latestBtcTs * 1000).toISOString().slice(0, 10);
+    logger.info(`BTC latest: ${latestBtcDate} = ${btcMap.get(latestBtcTs)}`);
+  }
   logger.info(`SPX data: ${spxMap.size} weekly bars, BTC: ${btcMap.size} weekly bars`);
   logger.info("Fetching FRED data...");
 
