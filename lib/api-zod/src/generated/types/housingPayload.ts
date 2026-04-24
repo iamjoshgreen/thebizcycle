@@ -17,5 +17,9 @@ export interface HousingPayload {
   expectedTimingNote: string | null;
   sequenceValid: boolean;
   sequenceNote: string;
+  headlineLabel: string;
+  headlineSubtitle: string;
+  summary: string;
+  fedContext: string;
   lastUpdated: number;
 }

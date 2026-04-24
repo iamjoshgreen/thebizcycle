@@ -259,6 +259,9 @@ components:
           enum: [expanding, rolling_over, fallen]
         fallen:
           type: boolean
+        orderStatus:
+          type: string
+          enum: [in_order, out_of_order, pending]
         data:
           type: array
           items:
@@ -277,6 +280,7 @@ components:
         - roc6m
         - state
         - fallen
+        - orderStatus
         - data
 
     FedStatus:
@@ -321,6 +325,14 @@ components:
           type: boolean
         sequenceNote:
           type: string
+        headlineLabel:
+          type: string
+        headlineSubtitle:
+          type: string
+        summary:
+          type: string
+        fedContext:
+          type: string
         lastUpdated:
           type: number
       required:
@@ -332,6 +344,10 @@ components:
         - expectedTimingNote
         - sequenceValid
         - sequenceNote
+        - headlineLabel
+        - headlineSubtitle
+        - summary
+        - fedContext
         - lastUpdated
 
     SectorStats:
@@ -415,6 +431,12 @@ components:
           type: string
         cjiBlurb:
           type: string
+        cjiTranslation:
+          type: string
+        sectorSummary:
+          type: string
+        confirmationStatus:
+          type: string
         confirmedRed:
           type: boolean
         sectors:
@@ -452,6 +474,9 @@ components:
         - cjiStatus
         - cjiLabel
         - cjiBlurb
+        - cjiTranslation
+        - sectorSummary
+        - confirmationStatus
         - confirmedRed
         - sectors
         - cjiHistory

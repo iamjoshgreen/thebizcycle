@@ -196,6 +196,7 @@ export const GetHousingResponse = zod.object({
       roc6m: zod.number().nullable(),
       state: zod.enum(["expanding", "rolling_over", "fallen"]),
       fallen: zod.boolean(),
+      orderStatus: zod.enum(["in_order", "out_of_order", "pending"]),
       data: zod.array(
         zod.object({
           time: zod.number(),
@@ -210,6 +211,10 @@ export const GetHousingResponse = zod.object({
   expectedTimingNote: zod.string().nullable(),
   sequenceValid: zod.boolean(),
   sequenceNote: zod.string(),
+  headlineLabel: zod.string(),
+  headlineSubtitle: zod.string(),
+  summary: zod.string(),
+  fedContext: zod.string(),
   lastUpdated: zod.number(),
 });
 
@@ -249,6 +254,7 @@ export const RefreshHousingResponse = zod.object({
       roc6m: zod.number().nullable(),
       state: zod.enum(["expanding", "rolling_over", "fallen"]),
       fallen: zod.boolean(),
+      orderStatus: zod.enum(["in_order", "out_of_order", "pending"]),
       data: zod.array(
         zod.object({
           time: zod.number(),
@@ -263,6 +269,10 @@ export const RefreshHousingResponse = zod.object({
   expectedTimingNote: zod.string().nullable(),
   sequenceValid: zod.boolean(),
   sequenceNote: zod.string(),
+  headlineLabel: zod.string(),
+  headlineSubtitle: zod.string(),
+  summary: zod.string(),
+  fedContext: zod.string(),
   lastUpdated: zod.number(),
 });
 
@@ -275,6 +285,9 @@ export const GetRecessionResponse = zod.object({
   cjiStatus: zod.enum(["expansion", "warning", "signal", "insufficient"]),
   cjiLabel: zod.string(),
   cjiBlurb: zod.string(),
+  cjiTranslation: zod.string(),
+  sectorSummary: zod.string(),
+  confirmationStatus: zod.string(),
   confirmedRed: zod.boolean(),
   sectors: zod.array(
     zod.object({
@@ -331,6 +344,9 @@ export const RefreshRecessionResponse = zod.object({
   cjiStatus: zod.enum(["expansion", "warning", "signal", "insufficient"]),
   cjiLabel: zod.string(),
   cjiBlurb: zod.string(),
+  cjiTranslation: zod.string(),
+  sectorSummary: zod.string(),
+  confirmationStatus: zod.string(),
   confirmedRed: zod.boolean(),
   sectors: zod.array(
     zod.object({

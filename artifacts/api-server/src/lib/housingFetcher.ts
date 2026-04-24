@@ -10,6 +10,12 @@ export interface MonthlyPoint {
 
 export type DominoState = "expanding" | "rolling_over" | "fallen";
 
+// "in_order" — fallen and every earlier domino has also fallen (proper sequence)
+// "out_of_order" — fallen but an earlier domino hasn't (skipped a step)
+//                  OR not fallen but a later domino has (the missing step)
+// "pending" — not fallen, and nothing later has fallen either (still expected)
+export type OrderStatus = "in_order" | "out_of_order" | "pending";
+
 export interface DominoStatus {
   id: "newSales" | "permits" | "underConstruction" | "employment" | "homePrices";
   label: string;
@@ -24,6 +30,7 @@ export interface DominoStatus {
   roc6m: number | null; // % change vs 6mo ago
   state: DominoState;
   fallen: boolean;
+  orderStatus: OrderStatus; // is this domino in its expected sequence position?
   data: MonthlyPoint[]; // last ~36 months for sparkline
 }
 
@@ -43,6 +50,11 @@ export interface HousingPayload {
   expectedTimingNote: string | null;
   sequenceValid: boolean;
   sequenceNote: string;
+  // Plain-English fields (deterministic templates) — backend is single source of truth.
+  headlineLabel: string; // "FALSE START" | "LATE STAGE" | "ARMED" | "WATCHING" | "DORMANT" | "EXPANSION"
+  headlineSubtitle: string; // one-line explainer under the label
+  summary: string; // sentence replacing "X fallen · Y rolling · Z steady"
+  fedContext: string; // "Fed Funds 3.64% — down from 5.33% peak…"
   lastUpdated: number;
 }
 
@@ -97,6 +109,7 @@ function computeDomino(
       roc6m: null,
       state: "expanding",
       fallen: false,
+      orderStatus: "pending",
       data: [],
     };
   }
@@ -138,8 +151,34 @@ function computeDomino(
     roc6m,
     state,
     fallen,
+    orderStatus: "pending", // overwritten in computeOrderStatuses() once we know the whole array
     data: points.slice(-36),
   };
+}
+
+// Per-domino "is this in its expected position?" flag. Computed across the
+// whole canonical-order array because the answer depends on neighbors.
+function computeOrderStatuses(dominoes: DominoStatus[]): OrderStatus[] {
+  // Identify the highest-index domino that has fallen. Anything before it that
+  // has NOT fallen is the "missing step" — out of order. Anything fallen up to
+  // (and including) that index that came after a non-fallen earlier one is
+  // also out of order.
+  const lastFallenIdx = (() => {
+    for (let i = dominoes.length - 1; i >= 0; i--) if (dominoes[i].fallen) return i;
+    return -1;
+  })();
+  return dominoes.map((d, i) => {
+    if (d.fallen) {
+      // Fallen → in order only if EVERY earlier domino has also fallen.
+      for (let j = 0; j < i; j++) {
+        if (!dominoes[j].fallen) return "out_of_order";
+      }
+      return "in_order";
+    }
+    // Not fallen → out of order if a later domino has fallen (skipped step),
+    // otherwise just pending.
+    return i < lastFallenIdx ? "out_of_order" : "pending";
+  });
 }
 
 function computeStage(dominoes: DominoStatus[]): { stage: number; stageLabel: string } {
@@ -211,6 +250,105 @@ function computeSequenceIntegrity(dominoes: DominoStatus[]): {
   return { valid: true, note: "Peaks occurred in the canonical order" };
 }
 
+// ─── Plain-English templates (deterministic — same inputs → same string) ─────
+
+const SHORT_LABELS: Record<DominoStatus["id"], string> = {
+  newSales: "New Home Sales",
+  permits: "Building Permits",
+  underConstruction: "Building Activity",
+  employment: "Construction Jobs",
+  homePrices: "Home Prices",
+};
+
+interface HeadlineCopy {
+  label: string;
+  subtitle: string;
+}
+
+function makeHeadline(
+  dominoes: DominoStatus[],
+  fed: FedStatus,
+  stage: number,
+  sequenceValid: boolean
+): HeadlineCopy {
+  const fallenCount = dominoes.filter((d) => d.fallen).length;
+  if (fallenCount === 0) {
+    return fed.tightening
+      ? {
+          label: "WATCHING",
+          subtitle:
+            "Fed is tightening — the trigger that usually starts the housing chain — but no domino has fallen yet.",
+        }
+      : {
+          label: "DORMANT",
+          subtitle:
+            "Fed isn't tightening and no housing dominoes have fallen. No housing-led signal.",
+        };
+  }
+  if (!sequenceValid) {
+    return {
+      label: "FALSE START",
+      subtitle:
+        "Housing is weakening, but in the wrong order for a real recession signal.",
+    };
+  }
+  if (stage >= 4) {
+    return {
+      label: "LATE STAGE",
+      subtitle:
+        "Dominoes are falling in the correct order and the chain is deep — this is the pattern that precedes recessions.",
+    };
+  }
+  return {
+    label: "ARMED",
+    subtitle:
+      "Dominoes are starting to fall in the correct order. When the chain runs in this sequence, it tends to keep going.",
+  };
+}
+
+function makeSummary(dominoes: DominoStatus[], sequenceValid: boolean): string {
+  const fallenCount = dominoes.filter((d) => d.fallen).length;
+  const rollingCount = dominoes.filter((d) => d.state === "rolling_over").length;
+  const standingCount = dominoes.length - fallenCount - rollingCount;
+  const fallWord = fallenCount === 1 ? "domino" : "dominoes";
+
+  if (fallenCount === 0 && rollingCount === 0) {
+    return "All 5 dominoes still standing — nothing rolling over yet.";
+  }
+  if (fallenCount === 0) {
+    return `${rollingCount} wobbling, ${standingCount} still standing. No domino has fully fallen.`;
+  }
+
+  // Tail clause depends on whether the first domino (newSales) led the way.
+  const firstFallen = dominoes[0].fallen;
+  const tail = sequenceValid
+    ? firstFallen
+      ? "and they fell in the correct order."
+      : "but the lead-off domino held."
+    : "but the wrong ones fell first.";
+
+  return `${fallenCount} ${fallWord} down, ${rollingCount} wobbling, ${standingCount} still standing — ${tail}`;
+}
+
+function makeFedContext(fed: FedStatus, fedAll: MonthlyPoint[]): string {
+  if (fed.current == null) {
+    return "Fed funds data unavailable.";
+  }
+  // 5-year rolling peak for "down from X% peak" context.
+  const window = fedAll.slice(-60);
+  let peak = window[0];
+  for (const p of window) if (p.value > peak.value) peak = p;
+
+  const cur = fed.current.toFixed(2);
+  if (peak.value > fed.current + 0.25) {
+    return `Fed Funds ${cur}% — down from ${peak.value.toFixed(2)}% peak, easing pressure on housing.`;
+  }
+  if (fed.tightening && fed.yearAgo != null) {
+    return `Fed Funds ${cur}% — up from ${fed.yearAgo.toFixed(2)}% a year ago, tightening pressure on housing.`;
+  }
+  return `Fed Funds ${cur}% — roughly flat, neutral pressure on housing.`;
+}
+
 export async function fetchHousingPayload(): Promise<HousingPayload> {
   logger.info("Fetching housing FRED series...");
 
@@ -219,7 +357,14 @@ export async function fetchHousingPayload(): Promise<HousingPayload> {
     ...SERIES.map((s) => fetchFredAll(s.series)),
   ]);
 
-  const dominoes: DominoStatus[] = SERIES.map((meta, i) => computeDomino(meta, seriesData[i]));
+  const dominoesRaw: DominoStatus[] = SERIES.map((meta, i) => computeDomino(meta, seriesData[i]));
+
+  // orderStatus is per-domino but depends on the whole array, so we set it after.
+  const orderStatuses = computeOrderStatuses(dominoesRaw);
+  const dominoes: DominoStatus[] = dominoesRaw.map((d, i) => ({
+    ...d,
+    orderStatus: orderStatuses[i],
+  }));
 
   // Fed tightening status
   const fedLast = fedfundsAll[fedfundsAll.length - 1] ?? null;
@@ -236,6 +381,11 @@ export async function fetchHousingPayload(): Promise<HousingPayload> {
   const { months: expectedTimingMonths, note: expectedTimingNote } = computeExpectedTiming(stage);
   const { valid: sequenceValid, note: sequenceNote } = computeSequenceIntegrity(dominoes);
 
+  // Plain-English templates from the same numbers.
+  const headline = makeHeadline(dominoes, fed, stage, sequenceValid);
+  const summary = makeSummary(dominoes, sequenceValid);
+  const fedContext = makeFedContext(fed, fedfundsAll);
+
   return {
     fed,
     dominoes,
@@ -245,6 +395,10 @@ export async function fetchHousingPayload(): Promise<HousingPayload> {
     expectedTimingNote,
     sequenceValid,
     sequenceNote,
+    headlineLabel: headline.label,
+    headlineSubtitle: headline.subtitle,
+    summary,
+    fedContext,
     lastUpdated: Math.floor(Date.now() / 1000),
   };
 }

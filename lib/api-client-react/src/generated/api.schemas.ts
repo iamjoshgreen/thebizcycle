@@ -66,6 +66,15 @@ export const DominoStatusState = {
   fallen: "fallen",
 } as const;
 
+export type DominoStatusOrderStatus =
+  (typeof DominoStatusOrderStatus)[keyof typeof DominoStatusOrderStatus];
+
+export const DominoStatusOrderStatus = {
+  in_order: "in_order",
+  out_of_order: "out_of_order",
+  pending: "pending",
+} as const;
+
 export interface DominoStatus {
   id: DominoStatusId;
   label: string;
@@ -80,6 +89,7 @@ export interface DominoStatus {
   roc6m: number | null;
   state: DominoStatusState;
   fallen: boolean;
+  orderStatus: DominoStatusOrderStatus;
   data: MonthlyPoint[];
 }
 
@@ -99,6 +109,10 @@ export interface HousingPayload {
   expectedTimingNote: string | null;
   sequenceValid: boolean;
   sequenceNote: string;
+  headlineLabel: string;
+  headlineSubtitle: string;
+  summary: string;
+  fedContext: string;
   lastUpdated: number;
 }
 
@@ -165,6 +179,9 @@ export interface RecessionPayload {
   cjiStatus: RecessionPayloadCjiStatus;
   cjiLabel: string;
   cjiBlurb: string;
+  cjiTranslation: string;
+  sectorSummary: string;
+  confirmationStatus: string;
   confirmedRed: boolean;
   sectors: SectorStats[];
   cjiHistory: MonthlyPoint[];

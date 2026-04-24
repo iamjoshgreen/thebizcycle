@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { DominoStatusId } from "./dominoStatusId";
+import type { DominoStatusOrderStatus } from "./dominoStatusOrderStatus";
 import type { DominoStatusState } from "./dominoStatusState";
 import type { MonthlyPoint } from "./monthlyPoint";
 
@@ -23,5 +24,6 @@ export interface DominoStatus {
   roc6m: number | null;
   state: DominoStatusState;
   fallen: boolean;
+  orderStatus: DominoStatusOrderStatus;
   data: MonthlyPoint[];
 }

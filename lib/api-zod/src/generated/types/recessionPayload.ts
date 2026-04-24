@@ -15,6 +15,9 @@ export interface RecessionPayload {
   cjiStatus: RecessionPayloadCjiStatus;
   cjiLabel: string;
   cjiBlurb: string;
+  cjiTranslation: string;
+  sectorSummary: string;
+  confirmationStatus: string;
   confirmedRed: boolean;
   sectors: SectorStats[];
   cjiHistory: MonthlyPoint[];

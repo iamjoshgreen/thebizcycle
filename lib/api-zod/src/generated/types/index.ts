@@ -10,6 +10,7 @@ export * from "./chartPayload";
 export * from "./dataPoint";
 export * from "./dominoStatus";
 export * from "./dominoStatusId";
+export * from "./dominoStatusOrderStatus";
 export * from "./dominoStatusState";
 export * from "./fedStatus";
 export * from "./healthStatus";

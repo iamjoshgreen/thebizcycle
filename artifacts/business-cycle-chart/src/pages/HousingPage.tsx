@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { Fragment, useCallback } from "react";
 import { useGetHousing, useRefreshHousing } from "@workspace/api-client-react";
 import type { DominoStatus, MonthlyPoint } from "@workspace/api-client-react";
 import TopBar from "@/components/TopBar";
@@ -162,6 +162,82 @@ const DOMINO_MEANING: Record<string, string> = {
     "Always the last to move. Sellers cling to old prices until they can't.",
 };
 
+// Plain-English badge for the per-card "is this in its expected position?" flag.
+// "in_order" → green ✓ "in order"
+// "out_of_order" → amber ✗ "out of order" (printed for both fallen-but-skipped
+//                  AND not-fallen-but-others-passed-it; both are sequence breaks)
+// "pending" → muted "—" (nothing to evaluate yet)
+function OrderBadge({ status }: { status: DominoStatus["orderStatus"] }) {
+  const config: Record<DominoStatus["orderStatus"], { fg: string; bg: string; border: string; icon: string; text: string }> = {
+    in_order: {
+      fg: "rgba(180,210,200,0.95)",
+      bg: "hsl(160 30% 12% / 0.6)",
+      border: "rgba(80,180,140,0.45)",
+      icon: "✓",
+      text: "in order",
+    },
+    out_of_order: {
+      fg: "rgba(255,210,140,0.95)",
+      bg: "hsl(35 60% 12% / 0.6)",
+      border: "rgba(245,160,40,0.5)",
+      icon: "✗",
+      text: "out of order",
+    },
+    pending: {
+      fg: "rgba(180,180,200,0.6)",
+      bg: "hsl(230 14% 11% / 0.5)",
+      border: "rgba(140,140,160,0.3)",
+      icon: "—",
+      text: "pending",
+    },
+  };
+  const c = config[status];
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 5,
+        padding: "2px 8px",
+        background: c.bg,
+        border: `1px solid ${c.border}`,
+        color: c.fg,
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: 10,
+        fontWeight: 700,
+        letterSpacing: "0.06em",
+        textTransform: "uppercase",
+        borderRadius: 4,
+      }}
+      data-testid={`order-${status}`}
+    >
+      <span style={{ fontSize: 12, lineHeight: 1 }}>{c.icon}</span>
+      {c.text}
+    </span>
+  );
+}
+
+// Arrow between domino cards — shows the expected falling order visually.
+function DominoArrow() {
+  return (
+    <div
+      style={{
+        flex: "0 0 24px",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: "rgba(180,180,200,0.35)",
+        fontSize: 22,
+        fontWeight: 300,
+        userSelect: "none",
+      }}
+      aria-hidden
+    >
+      →
+    </div>
+  );
+}
+
 function DominoCard({ d, index }: { d: DominoStatus; index: number }) {
   const c = STATE_COLORS[d.state] ?? STATE_COLORS.expanding;
   const stateLabel = d.state === "fallen" ? "FALLEN" : d.state === "rolling_over" ? "ROLLING" : "OK";
@@ -183,31 +259,47 @@ function DominoCard({ d, index }: { d: DominoStatus; index: number }) {
       }}
       data-testid={`domino-${d.id}`}
     >
-      {/* Step number + name (full width, can wrap) */}
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0 }}>
-        <span
-          style={{
-            color: "rgba(180,180,200,0.45)",
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: 14,
-            fontWeight: 600,
-            flexShrink: 0,
-          }}
-        >
-          {index + 1}
-        </span>
-        <span
-          style={{
-            color: "rgba(230,235,245,0.98)",
-            fontFamily: "'Inter', sans-serif",
-            fontSize: 17,
-            fontWeight: 600,
-            letterSpacing: "-0.01em",
-            lineHeight: 1.2,
-          }}
-        >
-          {shortLabel}
-        </span>
+      {/* Step number + name (top row), order badge on its own row below to
+          avoid overlapping the (often two-line) title in narrow cards. */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0 }}>
+          <span
+            style={{
+              color: "rgba(180,180,200,0.7)",
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 13,
+              fontWeight: 700,
+              flexShrink: 0,
+              background: "rgba(255,255,255,0.05)",
+              borderRadius: "50%",
+              width: 22,
+              height: 22,
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              lineHeight: 1,
+            }}
+          >
+            {index + 1}
+          </span>
+          <span
+            style={{
+              color: "rgba(230,235,245,0.98)",
+              fontFamily: "'Inter', sans-serif",
+              fontSize: 17,
+              fontWeight: 600,
+              letterSpacing: "-0.01em",
+              lineHeight: 1.2,
+              flex: 1,
+              minWidth: 0,
+            }}
+          >
+            {shortLabel}
+          </span>
+        </div>
+        <div>
+          <OrderBadge status={d.orderStatus} />
+        </div>
       </div>
 
       {/* Hero: % off peak + status pill side by side */}
@@ -314,64 +406,25 @@ export default function HousingPage() {
         )}
 
         {payload && (() => {
+          // Counts still drive the at-a-glance "DOMINOES FALLEN" card below.
           const fallenCount = payload.dominoes.filter((d) => d.fallen).length;
           const rollingCount = payload.dominoes.filter((d) => d.state === "rolling_over").length;
 
-          // Single-word verdict
-          let verdict: string;
-          let verdictColor: string;
-          let verdictBg: string;
-          let verdictBorder: string;
-          let plainEnglish: string;
-
-          // Identify which dominoes are out of order for the FALSE START copy
-          const fallenIds = payload.dominoes.filter((d) => d.fallen).map((d) => SHORT_LABELS[d.id] ?? d.label);
-          const firstNotFallen = payload.dominoes.find((d) => !d.fallen);
-          const firstNotFallenName = firstNotFallen ? (SHORT_LABELS[firstNotFallen.id] ?? firstNotFallen.label) : "";
-
-          if (!payload.sequenceValid) {
-            verdict = "FALSE START";
-            verdictColor = "#F59E0B";
-            verdictBg = "hsl(35 60% 11% / 0.7)";
-            verdictBorder = "rgba(245,160,40,0.6)";
-            plainEnglish =
-              `${fallenIds.join(" and ")} ${fallenIds.length === 1 ? "has" : "have"} fallen, but ${firstNotFallenName} hasn't yet. ` +
-              `That's the wrong order — when builders pull back before buyers do, it's usually a supply-side shock ` +
-              `(rates spike, materials, labor) rather than demand actually weakening. ` +
-              `A real housing-led downturn starts with buyers walking away first.`;
-          } else if (payload.stage >= 4) {
-            verdict = "LATE STAGE";
-            verdictColor = "#EF4444";
-            verdictBg = "hsl(0 50% 12% / 0.7)";
-            verdictBorder = "rgba(239,80,80,0.6)";
-            plainEnglish =
-              `${payload.stage} of 5 dominoes have fallen in the right order — buyers first, then everything downstream. ` +
-              `When the chain gets this deep, recession typically follows within 6–18 months.`;
-          } else if (payload.stage >= 2) {
-            verdict = "ARMED";
-            verdictColor = "#F59E0B";
-            verdictBg = "hsl(35 60% 11% / 0.7)";
-            verdictBorder = "rgba(245,160,40,0.6)";
-            plainEnglish =
-              `${payload.stage} of 5 dominoes have fallen in the right order, starting with buyers. ` +
-              `When the chain runs in this sequence, it tends to keep going. Watch the next domino.`;
-          } else if (payload.fed.tightening) {
-            verdict = "WATCHING";
-            verdictColor = "#60A5FA";
-            verdictBg = "hsl(220 40% 11% / 0.6)";
-            verdictBorder = "rgba(96,165,250,0.4)";
-            plainEnglish =
-              `Fed is tightening (${fmtNum(payload.fed.current, 2)}% now vs ${fmtNum(payload.fed.yearAgo, 2)}% a year ago), ` +
-              `which is the trigger that usually starts the housing chain. Nothing has fallen in order yet.`;
-          } else {
-            verdict = "DORMANT";
-            verdictColor = "#10B981";
-            verdictBg = "hsl(160 30% 11% / 0.6)";
-            verdictBorder = "rgba(80,180,140,0.4)";
-            plainEnglish =
-              `Fed isn't tightening (${fmtNum(payload.fed.current, 2)}% now vs ${fmtNum(payload.fed.yearAgo, 2)}% a year ago). ` +
-              `Without that pressure, the housing chain rarely starts. No recession signal here.`;
-          }
+          // Verdict + plain-English copy now come from the backend so the
+          // numbers, colors, and copy can never drift out of sync.
+          const verdict = payload.headlineLabel;
+          const VERDICT_THEME: Record<string, { color: string; bg: string; border: string }> = {
+            "FALSE START": { color: "#F59E0B", bg: "hsl(35 60% 11% / 0.7)", border: "rgba(245,160,40,0.6)" },
+            "LATE STAGE": { color: "#EF4444", bg: "hsl(0 50% 12% / 0.7)", border: "rgba(239,80,80,0.6)" },
+            ARMED: { color: "#F59E0B", bg: "hsl(35 60% 11% / 0.7)", border: "rgba(245,160,40,0.6)" },
+            WATCHING: { color: "#60A5FA", bg: "hsl(220 40% 11% / 0.6)", border: "rgba(96,165,250,0.4)" },
+            DORMANT: { color: "#10B981", bg: "hsl(160 30% 11% / 0.6)", border: "rgba(80,180,140,0.4)" },
+            EXPANSION: { color: "#10B981", bg: "hsl(160 30% 11% / 0.6)", border: "rgba(80,180,140,0.4)" },
+          };
+          const theme = VERDICT_THEME[verdict] ?? VERDICT_THEME.WATCHING;
+          const verdictColor = theme.color;
+          const verdictBg = theme.bg;
+          const verdictBorder = theme.border;
 
           return (
           <div style={{ display: "flex", flexDirection: "column", gap: 28, maxWidth: 1600, margin: "0 auto" }}>
@@ -414,30 +467,44 @@ export default function HousingPage() {
                 </div>
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
+                {/* One-line plain-English subtitle — the 30-second takeaway. */}
                 <div
                   style={{
-                    color: "rgba(225,230,240,0.92)",
+                    color: "rgba(235,240,250,0.95)",
                     fontFamily: "'Inter', sans-serif",
                     fontSize: 17,
-                    lineHeight: 1.5,
-                    fontWeight: 400,
+                    lineHeight: 1.45,
+                    fontWeight: 500,
                   }}
+                  data-testid="headline-subtitle"
                 >
-                  {plainEnglish}
+                  {payload.headlineSubtitle}
                 </div>
+                {/* Plain-English summary sentence — replaces the count row. */}
                 <div
                   style={{
-                    display: "flex",
-                    gap: 24,
-                    marginTop: 14,
-                    color: "rgba(180,180,200,0.65)",
-                    fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: 13,
+                    color: "rgba(200,205,220,0.75)",
+                    fontFamily: "'Inter', sans-serif",
+                    fontSize: 14,
+                    lineHeight: 1.5,
+                    marginTop: 8,
                   }}
+                  data-testid="housing-summary"
                 >
-                  <span>{fallenCount} fallen · {rollingCount} rolling · {5 - fallenCount - rollingCount} steady</span>
-                  <span>Fed funds {fmtNum(payload.fed.current, 2)}%</span>
-                  <span>{payload.stage}/5 in proper order</span>
+                  {payload.summary}
+                </div>
+                {/* Fed context line — humanized rate context. */}
+                <div
+                  style={{
+                    color: "rgba(180,185,200,0.7)",
+                    fontFamily: "'Inter', sans-serif",
+                    fontSize: 13,
+                    lineHeight: 1.5,
+                    marginTop: 4,
+                  }}
+                  data-testid="housing-fed-context"
+                >
+                  {payload.fedContext}
                 </div>
               </div>
             </div>
@@ -817,10 +884,14 @@ export default function HousingPage() {
               </div>
             </div>
 
-            {/* Domino row */}
-            <div style={{ display: "flex", gap: 14, alignItems: "stretch" }}>
+            {/* Domino row — cards separated by directional arrows so the
+                expected falling order is visually obvious. */}
+            <div style={{ display: "flex", gap: 6, alignItems: "stretch" }}>
               {payload.dominoes.map((d, i) => (
-                <DominoCard key={d.id} d={d} index={i} />
+                <Fragment key={d.id}>
+                  {i > 0 && <DominoArrow />}
+                  <DominoCard d={d} index={i} />
+                </Fragment>
               ))}
             </div>
 

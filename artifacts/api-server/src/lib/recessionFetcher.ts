@@ -44,6 +44,10 @@ export interface RecessionPayload {
   cjiStatus: RecessionStatus;
   cjiLabel: string; // e.g. "Expansion", "Warning — clock has started", "Recession Warning — 9-29mo lead"
   cjiBlurb: string; // one-line plain-English description
+  // Plain-English fields (deterministic templates) — backend is single source of truth.
+  cjiTranslation: string; // "Translation: …" sentence under the headline label
+  sectorSummary: string; // mini status line above the sector table
+  confirmationStatus: string; // explicit "Confirmation: …" wording (no vague "pending")
   confirmedRed: boolean; // CJI <= -1.5 AND both leaders' 3M-ann < 0 for 2+ consecutive months
   sectors: SectorStats[]; // 4 rows: 2 leaders + 2 confirmations
   cjiHistory: CjiMonthlyPoint[]; // historical CJI (rolling 60-mo peak), 30+ years
@@ -321,6 +325,72 @@ function checkConfirmedRed(
   return checkMonth(lastTs) && checkMonth(prevTs);
 }
 
+// ─── Plain-English templates (deterministic — same inputs → same string) ─────
+
+function makeTranslation(
+  cji: number | null,
+  cjiZone: RecessionStatus,
+  confirmedRed: boolean,
+  leaders: SectorStats[]
+): string {
+  if (cjiZone === "insufficient" || cji == null) {
+    return "Translation: not enough data to compute the index right now.";
+  }
+  if (cjiZone === "expansion") {
+    return "Translation: cyclical sectors at or near peak. No recession signal.";
+  }
+  if (cjiZone === "warning") {
+    return "Translation: warning zone. The clock has started but no confirmation yet.";
+  }
+  // signal (red zone)
+  const momenta = leaders.map((l) => l.ann3mPct).filter((v): v is number => v != null);
+  const allNegative = momenta.length > 0 && momenta.every((v) => v < 0);
+  const allPositive = momenta.length > 0 && momenta.every((v) => v > 0);
+  if (confirmedRed) {
+    return "Translation: red zone AND jobs are actively declining on both leaders. Position accordingly.";
+  }
+  if (allPositive) {
+    return "Translation: warning zone, but jobs aren't actively declining right now.";
+  }
+  if (allNegative) {
+    return "Translation: red zone with negative momentum on both leaders. Close to confirmation.";
+  }
+  return "Translation: red zone with mixed momentum. Developing signal — watch the next print.";
+}
+
+function makeSectorSummary(sectors: SectorStats[]): string {
+  const total = sectors.length;
+  const redCount = sectors.filter((s) => s.status === "signal").length;
+  const leaders = sectors.filter((s) => s.role === "leader");
+  const leaderMomenta = leaders.map((l) => l.ann3mPct).filter((v): v is number => v != null);
+  if (leaderMomenta.length < leaders.length || leaders.length === 0) {
+    return `${redCount} of ${total} sectors in red. Leader momentum unavailable.`;
+  }
+  const allPositive = leaderMomenta.every((v) => v > 0);
+  const momentumText = allPositive
+    ? "Momentum positive on both leaders."
+    : "Momentum negative on at least one leader.";
+  const directionText = allPositive ? "Not accelerating down." : "Actively weakening.";
+  return `${redCount} of ${total} sectors in red. ${momentumText} ${directionText}`;
+}
+
+function makeConfirmationStatus(
+  cji: number | null,
+  cjiZone: RecessionStatus,
+  confirmedRed: boolean
+): string {
+  if (cji == null || cjiZone === "insufficient") {
+    return "Confirmation: n/a (insufficient data).";
+  }
+  if (cjiZone !== "signal") {
+    return "Confirmation: n/a (CJI above red zone).";
+  }
+  if (confirmedRed) {
+    return "Confirmation: fired (2+ months of job losses on both leaders).";
+  }
+  return "Confirmation: not fired (needs 2 months of job losses on both leaders).";
+}
+
 function makeLabel(status: RecessionStatus, confirmedRed: boolean): { label: string; blurb: string } {
   if (status === "insufficient") {
     return {
@@ -416,6 +486,12 @@ export async function fetchRecessionPayload(): Promise<RecessionPayload> {
 
   const { label, blurb } = makeLabel(cjiZone, confirmedRed);
 
+  // Plain-English templates derived from the same numbers used above.
+  const leaderRows = sectors.filter((s) => s.role === "leader");
+  const cjiTranslation = makeTranslation(cji, cjiZone, confirmedRed, leaderRows);
+  const sectorSummary = makeSectorSummary(sectors);
+  const confirmationStatus = makeConfirmationStatus(cji, cjiZone, confirmedRed);
+
   const notes: string[] = [];
   let partialData = false;
   for (const s of sectors) {
@@ -453,6 +529,9 @@ export async function fetchRecessionPayload(): Promise<RecessionPayload> {
     cjiStatus,
     cjiLabel: label,
     cjiBlurb: blurb,
+    cjiTranslation,
+    sectorSummary,
+    confirmationStatus,
     confirmedRed,
     sectors,
     cjiHistory,

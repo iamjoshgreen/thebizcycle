@@ -182,6 +182,7 @@ interface CjiChartProps {
   height?: number;
 }
 
+// "You are here" callout positioned to avoid clipping at the right edge.
 function CjiChart({ history, recessions, width = 1200, height = 320 }: CjiChartProps) {
   if (history.length < 2) {
     return (
@@ -369,8 +370,82 @@ function CjiChart({ history, recessions, width = 1200, height = 320 }: CjiChartP
         strokeLinecap="round"
       />
 
-      {/* Current dot */}
+      {/* Current dot — outer halo + solid center for visibility */}
+      <circle
+        cx={x(last.time)}
+        cy={y(last.value)}
+        r={7}
+        fill={currentColor}
+        opacity={0.22}
+      />
       <circle cx={x(last.time)} cy={y(last.value)} r={3.5} fill={currentColor} />
+
+      {/* "You are here" callout — line + label, anchored to the right side
+          of the dot but flipped to the left if too close to the right edge.
+          We compute the actual rect bounds first, then test against the chart
+          inset bounds (and clamp on the opposite side as a safety net) so the
+          label can never clip on either edge. */}
+      {(() => {
+        const dotX = x(last.time);
+        const dotY = y(last.value);
+        const labelText = `${last.value > 0 ? "+" : ""}${last.value.toFixed(2)}% today`;
+        // Approximate width: ~6.6px per char in an 11px monospace font, plus
+        // 14px of internal padding for the rounded rect.
+        const labelW = labelText.length * 6.6 + 14;
+        // When NOT flipped, the rect's right edge is dotX + 20 + labelW
+        // (lineX2 = dotX+18, textX = lineX2+6, rectX = textX-4 = dotX+20).
+        // When flipped, the rect's left edge is dotX - 24 - labelW.
+        const wouldOverflowRight = dotX + 20 + labelW > width - padR;
+        const flushRight = wouldOverflowRight;
+        const lineX2 = flushRight ? dotX - 18 : dotX + 18;
+        // Compute rect position then clamp into the inset chart area so it
+        // can never escape on either side, even on extreme dot positions.
+        const rawRectX = flushRight ? lineX2 - 6 - labelW : lineX2 + 6 - 4;
+        const rectX = Math.max(padL, Math.min(width - padR - labelW, rawRectX));
+        // Re-derive textX from the (possibly clamped) rectX so the text stays
+        // aligned inside the rect regardless of clamping. textAnchor=start
+        // grows rightward from textX; textAnchor=end grows leftward from textX.
+        const textX = flushRight ? rectX + labelW - 6 : rectX + 4;
+        // Push the label up a bit so it doesn't sit on the line itself,
+        // but keep it inside the top inset so it can't clip vertically.
+        const lineY2 = Math.max(padT + 12, dotY - 18);
+        const textY = lineY2 + 4;
+        return (
+          <g>
+            <line
+              x1={dotX}
+              y1={dotY}
+              x2={lineX2}
+              y2={lineY2}
+              stroke={currentColor}
+              strokeWidth={1}
+              opacity={0.7}
+            />
+            <rect
+              x={rectX}
+              y={lineY2 - 9}
+              width={labelW}
+              height={18}
+              rx={3}
+              fill="rgba(15,15,20,0.92)"
+              stroke={currentColor}
+              strokeWidth={1}
+              opacity={0.95}
+            />
+            <text
+              x={textX}
+              y={textY}
+              textAnchor={flushRight ? "end" : "start"}
+              fill={currentColor}
+              fontFamily="'JetBrains Mono', monospace"
+              fontSize={11}
+              fontWeight={700}
+            >
+              {labelText}
+            </text>
+          </g>
+        );
+      })()}
     </svg>
   );
 }
@@ -642,12 +717,27 @@ export default function RecessionPage() {
                 >
                   {payload.cjiLabel.toUpperCase()}
                 </div>
+                {/* Plain-English translation — single sentence in human voice. */}
                 <div
                   style={{
-                    color: "rgba(225,230,240,0.92)",
+                    color: "rgba(235,240,250,0.95)",
                     fontFamily: "'Inter', sans-serif",
-                    fontSize: 16,
-                    lineHeight: 1.55,
+                    fontSize: 17,
+                    fontWeight: 500,
+                    lineHeight: 1.45,
+                  }}
+                  data-testid="cji-translation"
+                >
+                  {payload.cjiTranslation}
+                </div>
+                {/* Mechanical / "what it is" line, smaller and secondary. */}
+                <div
+                  style={{
+                    color: "rgba(190,195,210,0.7)",
+                    fontFamily: "'Inter', sans-serif",
+                    fontSize: 13,
+                    lineHeight: 1.5,
+                    marginTop: 6,
                   }}
                 >
                   {payload.cjiBlurb}
@@ -666,24 +756,18 @@ export default function RecessionPage() {
                   <span>
                     Data as of <strong style={{ color: "rgba(220,225,235,0.9)" }}>{fmtMonth(payload.dataAsOf)}</strong>
                   </span>
-                  <span>
-                    Confirmation:{" "}
-                    <strong
-                      style={{
-                        color:
-                          payload.cji != null && payload.cji <= -1.5
-                            ? payload.confirmedRed
-                              ? STATUS_COLORS.signal.fg
-                              : STATUS_COLORS.warning.fg
-                            : "rgba(180,180,200,0.65)",
-                      }}
-                    >
-                      {payload.cji == null || payload.cji > -1.5
-                        ? "n/a (CJI above red zone)"
-                        : payload.confirmedRed
-                          ? "fired (2+ months negative on both leaders)"
-                          : "pending"}
-                    </strong>
+                  <span
+                    style={{
+                      color:
+                        payload.cji != null && payload.cji <= -1.5
+                          ? payload.confirmedRed
+                            ? STATUS_COLORS.signal.fg
+                            : STATUS_COLORS.warning.fg
+                          : "rgba(180,180,200,0.65)",
+                    }}
+                    data-testid="confirmation-status"
+                  >
+                    {payload.confirmationStatus}
                   </span>
                   {payload.partialData && (
                     <span style={{ color: "rgba(245,158,11,0.85)" }}>
@@ -788,16 +872,30 @@ export default function RecessionPage() {
                   justifyContent: "space-between",
                 }}
               >
-                <div
-                  style={{
-                    color: "rgba(225,230,240,0.95)",
-                    fontFamily: "'Inter', sans-serif",
-                    fontSize: 15,
-                    fontWeight: 600,
-                    letterSpacing: "-0.01em",
-                  }}
-                >
-                  Sector detail
+                <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <div
+                    style={{
+                      color: "rgba(225,230,240,0.95)",
+                      fontFamily: "'Inter', sans-serif",
+                      fontSize: 15,
+                      fontWeight: 600,
+                      letterSpacing: "-0.01em",
+                    }}
+                  >
+                    Sector detail
+                  </div>
+                  {/* Plain-English sector summary — glance read of the whole table. */}
+                  <div
+                    style={{
+                      color: "rgba(220,225,235,0.85)",
+                      fontFamily: "'Inter', sans-serif",
+                      fontSize: 13,
+                      lineHeight: 1.5,
+                    }}
+                    data-testid="sector-summary"
+                  >
+                    {payload.sectorSummary}
+                  </div>
                 </div>
                 <div
                   style={{
@@ -806,14 +904,14 @@ export default function RecessionPage() {
                     fontSize: 11,
                   }}
                 >
-                  Peak = trailing 60-month max · Ann% = compound annualized over 3mo
+                  Peak = trailing 60-month max · Recent Momentum = 3-month annualized
                 </div>
               </div>
               <div style={{ overflowX: "auto" }}>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr>
-                      {["Sector", "Current", "Peak", "% Off Peak", "Mo Since Peak", "YoY %", "3M Ann %"].map(
+                      {["Sector", "Current", "Peak", "% Off Peak", "Mo Since Peak", "YoY %", "Recent Momentum"].map(
                         (h, i) => (
                           <th
                             key={h}
