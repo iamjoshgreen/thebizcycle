@@ -394,3 +394,254 @@ export const RefreshRecessionResponse = zod.object({
   notes: zod.array(zod.string()),
   lastUpdated: zod.number(),
 });
+
+/**
+ * Returns cyclical GDP growth (durables + residential investment + business equipment), components, history, and contraction-frequency stats
+ * @summary Get cyclical GDP indicator payload
+ */
+export const GetCyclicalResponse = zod.object({
+  latestQuarter: zod
+    .number()
+    .nullable()
+    .describe("Unix seconds, first day of latest quarter UTC"),
+  latestQuarterLabel: zod.string().describe('Human label like \"2026 Q1\"'),
+  latestQoqAnnPct: zod
+    .number()
+    .nullable()
+    .describe("Latest QoQ annualized growth of cyclical GDP (%)"),
+  latestYoyPct: zod.number().nullable(),
+  status: zod.enum([
+    "strong",
+    "expansion",
+    "decelerating",
+    "contraction",
+    "insufficient",
+  ]),
+  statusLabel: zod.string(),
+  statusBlurb: zod.string(),
+  recentSequence: zod
+    .array(
+      zod.object({
+        time: zod.number(),
+        quarterLabel: zod.string(),
+        value: zod.number().nullable(),
+      }),
+    )
+    .describe(
+      "Most recent up to 4 quarters of cyclical QoQ ann growth, oldest first",
+    ),
+  components: zod.array(
+    zod.object({
+      id: zod.enum([
+        "durableGoods",
+        "residentialInvestment",
+        "businessEquipment",
+      ]),
+      label: zod.string(),
+      series: zod.string(),
+      latestLevel: zod
+        .number()
+        .nullable()
+        .describe("Latest level in billions of chained 2017 dollars (SAAR)"),
+      qoqAnnPct: zod
+        .number()
+        .nullable()
+        .describe("Latest quarter-over-quarter annualized growth (%)"),
+      yoyPct: zod.number().nullable().describe("Year-over-year growth (%)"),
+      shareOfGdpPct: zod
+        .number()
+        .nullable()
+        .describe("Latest level as a share of Real GDP (%)"),
+      contractionPctSince1956: zod
+        .number()
+        .nullable()
+        .describe(
+          "Share of quarters this component contracted (QoQ ann < 0) since 1956",
+        ),
+    }),
+  ),
+  cyclicalSharePct: zod
+    .number()
+    .nullable()
+    .describe("Cyclical GDP as share of Real GDP, latest quarter (%)"),
+  cyclicalGrowthHistory: zod
+    .array(
+      zod.object({
+        time: zod.number().describe("Unix seconds, first day of quarter UTC"),
+        value: zod.number().describe("QoQ annualized growth in %"),
+      }),
+    )
+    .describe("QoQ annualized growth of cyclical GDP, all quarters available"),
+  totalGdpGrowthHistory: zod.array(
+    zod.object({
+      time: zod.number().describe("Unix seconds, first day of quarter UTC"),
+      value: zod.number().describe("QoQ annualized growth in %"),
+    }),
+  ),
+  nonCyclicalGrowthHistory: zod.array(
+    zod.object({
+      time: zod.number().describe("Unix seconds, first day of quarter UTC"),
+      value: zod.number().describe("QoQ annualized growth in %"),
+    }),
+  ),
+  cyclicalMa4History: zod
+    .array(
+      zod.object({
+        time: zod.number().describe("Unix seconds, first day of quarter UTC"),
+        value: zod.number().describe("QoQ annualized growth in %"),
+      }),
+    )
+    .describe("4-quarter trailing average of cyclical QoQ ann growth"),
+  nberRecessions: zod.array(
+    zod.object({
+      start: zod.number(),
+      end: zod.number(),
+    }),
+  ),
+  contractionStats: zod.object({
+    cyclicalPct: zod
+      .number()
+      .nullable()
+      .describe("Share of quarters cyclical GDP contracted since 1956 (%)"),
+    totalGdpPct: zod
+      .number()
+      .nullable()
+      .describe("Share of quarters Real GDP contracted since 1956 (%)"),
+    nonCyclicalPct: zod
+      .number()
+      .nullable()
+      .describe("Share of quarters non-cyclical GDP contracted since 1956 (%)"),
+    sinceYear: zod
+      .number()
+      .describe("First year included in the contraction-frequency stats"),
+    quartersCounted: zod.number(),
+  }),
+  partialData: zod.boolean(),
+  notes: zod.array(zod.string()),
+  lastUpdated: zod.number(),
+});
+
+/**
+ * @summary Force refresh cyclical GDP data
+ */
+export const RefreshCyclicalResponse = zod.object({
+  latestQuarter: zod
+    .number()
+    .nullable()
+    .describe("Unix seconds, first day of latest quarter UTC"),
+  latestQuarterLabel: zod.string().describe('Human label like \"2026 Q1\"'),
+  latestQoqAnnPct: zod
+    .number()
+    .nullable()
+    .describe("Latest QoQ annualized growth of cyclical GDP (%)"),
+  latestYoyPct: zod.number().nullable(),
+  status: zod.enum([
+    "strong",
+    "expansion",
+    "decelerating",
+    "contraction",
+    "insufficient",
+  ]),
+  statusLabel: zod.string(),
+  statusBlurb: zod.string(),
+  recentSequence: zod
+    .array(
+      zod.object({
+        time: zod.number(),
+        quarterLabel: zod.string(),
+        value: zod.number().nullable(),
+      }),
+    )
+    .describe(
+      "Most recent up to 4 quarters of cyclical QoQ ann growth, oldest first",
+    ),
+  components: zod.array(
+    zod.object({
+      id: zod.enum([
+        "durableGoods",
+        "residentialInvestment",
+        "businessEquipment",
+      ]),
+      label: zod.string(),
+      series: zod.string(),
+      latestLevel: zod
+        .number()
+        .nullable()
+        .describe("Latest level in billions of chained 2017 dollars (SAAR)"),
+      qoqAnnPct: zod
+        .number()
+        .nullable()
+        .describe("Latest quarter-over-quarter annualized growth (%)"),
+      yoyPct: zod.number().nullable().describe("Year-over-year growth (%)"),
+      shareOfGdpPct: zod
+        .number()
+        .nullable()
+        .describe("Latest level as a share of Real GDP (%)"),
+      contractionPctSince1956: zod
+        .number()
+        .nullable()
+        .describe(
+          "Share of quarters this component contracted (QoQ ann < 0) since 1956",
+        ),
+    }),
+  ),
+  cyclicalSharePct: zod
+    .number()
+    .nullable()
+    .describe("Cyclical GDP as share of Real GDP, latest quarter (%)"),
+  cyclicalGrowthHistory: zod
+    .array(
+      zod.object({
+        time: zod.number().describe("Unix seconds, first day of quarter UTC"),
+        value: zod.number().describe("QoQ annualized growth in %"),
+      }),
+    )
+    .describe("QoQ annualized growth of cyclical GDP, all quarters available"),
+  totalGdpGrowthHistory: zod.array(
+    zod.object({
+      time: zod.number().describe("Unix seconds, first day of quarter UTC"),
+      value: zod.number().describe("QoQ annualized growth in %"),
+    }),
+  ),
+  nonCyclicalGrowthHistory: zod.array(
+    zod.object({
+      time: zod.number().describe("Unix seconds, first day of quarter UTC"),
+      value: zod.number().describe("QoQ annualized growth in %"),
+    }),
+  ),
+  cyclicalMa4History: zod
+    .array(
+      zod.object({
+        time: zod.number().describe("Unix seconds, first day of quarter UTC"),
+        value: zod.number().describe("QoQ annualized growth in %"),
+      }),
+    )
+    .describe("4-quarter trailing average of cyclical QoQ ann growth"),
+  nberRecessions: zod.array(
+    zod.object({
+      start: zod.number(),
+      end: zod.number(),
+    }),
+  ),
+  contractionStats: zod.object({
+    cyclicalPct: zod
+      .number()
+      .nullable()
+      .describe("Share of quarters cyclical GDP contracted since 1956 (%)"),
+    totalGdpPct: zod
+      .number()
+      .nullable()
+      .describe("Share of quarters Real GDP contracted since 1956 (%)"),
+    nonCyclicalPct: zod
+      .number()
+      .nullable()
+      .describe("Share of quarters non-cyclical GDP contracted since 1956 (%)"),
+    sinceYear: zod
+      .number()
+      .describe("First year included in the contraction-frequency stats"),
+    quartersCounted: zod.number(),
+  }),
+  partialData: zod.boolean(),
+  notes: zod.array(zod.string()),
+  lastUpdated: zod.number(),
+});

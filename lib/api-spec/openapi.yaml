@@ -109,6 +109,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/RecessionPayload"
 
+  /cyclical:
+    get:
+      operationId: getCyclical
+      tags: [cyclical]
+      summary: Get cyclical GDP indicator payload
+      description: Returns cyclical GDP growth (durables + residential investment + business equipment), components, history, and contraction-frequency stats
+      responses:
+        "200":
+          description: Cyclical GDP payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CyclicalPayload"
+
+  /cyclical/refresh:
+    post:
+      operationId: refreshCyclical
+      tags: [cyclical]
+      summary: Force refresh cyclical GDP data
+      responses:
+        "200":
+          description: Refreshed cyclical GDP payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CyclicalPayload"
+
 components:
   schemas:
     HealthStatus:
@@ -493,3 +520,202 @@ components:
         - partialData
         - notes
         - lastUpdated
+
+    CyclicalComponentId:
+      type: string
+      enum:
+        - durableGoods
+        - residentialInvestment
+        - businessEquipment
+
+    CyclicalComponent:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/CyclicalComponentId"
+        label:
+          type: string
+        series:
+          type: string
+        latestLevel:
+          type: number
+          nullable: true
+          description: Latest level in billions of chained 2017 dollars (SAAR)
+        qoqAnnPct:
+          type: number
+          nullable: true
+          description: Latest quarter-over-quarter annualized growth (%)
+        yoyPct:
+          type: number
+          nullable: true
+          description: Year-over-year growth (%)
+        shareOfGdpPct:
+          type: number
+          nullable: true
+          description: Latest level as a share of Real GDP (%)
+        contractionPctSince1956:
+          type: number
+          nullable: true
+          description: Share of quarters this component contracted (QoQ ann < 0) since 1956
+      required:
+        - id
+        - label
+        - series
+        - latestLevel
+        - qoqAnnPct
+        - yoyPct
+        - shareOfGdpPct
+        - contractionPctSince1956
+
+    CyclicalGrowthPoint:
+      type: object
+      properties:
+        time:
+          type: number
+          description: Unix seconds, first day of quarter UTC
+        value:
+          type: number
+          description: QoQ annualized growth in %
+      required: [time, value]
+
+    CyclicalContractionStats:
+      type: object
+      properties:
+        cyclicalPct:
+          type: number
+          nullable: true
+          description: Share of quarters cyclical GDP contracted since 1956 (%)
+        totalGdpPct:
+          type: number
+          nullable: true
+          description: Share of quarters Real GDP contracted since 1956 (%)
+        nonCyclicalPct:
+          type: number
+          nullable: true
+          description: Share of quarters non-cyclical GDP contracted since 1956 (%)
+        sinceYear:
+          type: number
+          description: First year included in the contraction-frequency stats
+        quartersCounted:
+          type: number
+      required:
+        - cyclicalPct
+        - totalGdpPct
+        - nonCyclicalPct
+        - sinceYear
+        - quartersCounted
+
+    CyclicalStatus:
+      type: string
+      enum: [strong, expansion, decelerating, contraction, insufficient]
+
+    CyclicalPayload:
+      type: object
+      properties:
+        latestQuarter:
+          type: number
+          nullable: true
+          description: Unix seconds, first day of latest quarter UTC
+        latestQuarterLabel:
+          type: string
+          description: Human label like "2026 Q1"
+        latestQoqAnnPct:
+          type: number
+          nullable: true
+          description: Latest QoQ annualized growth of cyclical GDP (%)
+        latestYoyPct:
+          type: number
+          nullable: true
+        status:
+          $ref: "#/components/schemas/CyclicalStatus"
+        statusLabel:
+          type: string
+        statusBlurb:
+          type: string
+        recentSequence:
+          type: array
+          description: Most recent up to 4 quarters of cyclical QoQ ann growth, oldest first
+          items:
+            type: object
+            properties:
+              time:
+                type: number
+              quarterLabel:
+                type: string
+              value:
+                type: number
+                nullable: true
+            required: [time, quarterLabel, value]
+        components:
+          type: array
+          items:
+            $ref: "#/components/schemas/CyclicalComponent"
+        cyclicalSharePct:
+          type: number
+          nullable: true
+          description: Cyclical GDP as share of Real GDP, latest quarter (%)
+        cyclicalGrowthHistory:
+          type: array
+          description: QoQ annualized growth of cyclical GDP, all quarters available
+          items:
+            $ref: "#/components/schemas/CyclicalGrowthPoint"
+        totalGdpGrowthHistory:
+          type: array
+          items:
+            $ref: "#/components/schemas/CyclicalGrowthPoint"
+        nonCyclicalGrowthHistory:
+          type: array
+          items:
+            $ref: "#/components/schemas/CyclicalGrowthPoint"
+        cyclicalMa4History:
+          type: array
+          description: 4-quarter trailing average of cyclical QoQ ann growth
+          items:
+            $ref: "#/components/schemas/CyclicalGrowthPoint"
+        nberRecessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/NberRecessionInterval"
+        contractionStats:
+          $ref: "#/components/schemas/CyclicalContractionStats"
+        partialData:
+          type: boolean
+        notes:
+          type: array
+          items:
+            type: string
+        lastUpdated:
+          type: number
+      required:
+        - latestQuarter
+        - latestQuarterLabel
+        - latestQoqAnnPct
+        - latestYoyPct
+        - status
+        - statusLabel
+        - statusBlurb
+        - recentSequence
+        - components
+        - cyclicalSharePct
+        - cyclicalGrowthHistory
+        - totalGdpGrowthHistory
+        - nonCyclicalGrowthHistory
+        - cyclicalMa4History
+        - nberRecessions
+        - contractionStats
+        - partialData
+        - notes
+        - lastUpdated
+
+    CyclicalQuarterEntry:
+      type: object
+      description: One quarter entry in recentSequence; defined here so Zod can be regenerated cleanly.
+      properties:
+        time:
+          type: number
+        quarterLabel:
+          type: string
+        value:
+          type: number
+          nullable: true
+      required: [time, quarterLabel, value]

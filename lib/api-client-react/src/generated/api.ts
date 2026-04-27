@@ -18,6 +18,7 @@ import type {
 
 import type {
   ChartPayload,
+  CyclicalPayload,
   HealthStatus,
   HousingPayload,
   RecessionPayload,
@@ -570,4 +571,161 @@ export const useRefreshRecession = <
   TContext
 > => {
   return useMutation(getRefreshRecessionMutationOptions(options));
+};
+
+/**
+ * Returns cyclical GDP growth (durables + residential investment + business equipment), components, history, and contraction-frequency stats
+ * @summary Get cyclical GDP indicator payload
+ */
+export const getGetCyclicalUrl = () => {
+  return `/api/cyclical`;
+};
+
+export const getCyclical = async (
+  options?: RequestInit,
+): Promise<CyclicalPayload> => {
+  return customFetch<CyclicalPayload>(getGetCyclicalUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetCyclicalQueryKey = () => {
+  return [`/api/cyclical`] as const;
+};
+
+export const getGetCyclicalQueryOptions = <
+  TData = Awaited<ReturnType<typeof getCyclical>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCyclical>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetCyclicalQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getCyclical>>> = ({
+    signal,
+  }) => getCyclical({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getCyclical>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetCyclicalQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getCyclical>>
+>;
+export type GetCyclicalQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get cyclical GDP indicator payload
+ */
+
+export function useGetCyclical<
+  TData = Awaited<ReturnType<typeof getCyclical>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getCyclical>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetCyclicalQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Force refresh cyclical GDP data
+ */
+export const getRefreshCyclicalUrl = () => {
+  return `/api/cyclical/refresh`;
+};
+
+export const refreshCyclical = async (
+  options?: RequestInit,
+): Promise<CyclicalPayload> => {
+  return customFetch<CyclicalPayload>(getRefreshCyclicalUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRefreshCyclicalMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof refreshCyclical>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof refreshCyclical>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["refreshCyclical"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof refreshCyclical>>,
+    void
+  > = () => {
+    return refreshCyclical(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RefreshCyclicalMutationResult = NonNullable<
+  Awaited<ReturnType<typeof refreshCyclical>>
+>;
+
+export type RefreshCyclicalMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Force refresh cyclical GDP data
+ */
+export const useRefreshCyclical = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof refreshCyclical>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof refreshCyclical>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getRefreshCyclicalMutationOptions(options));
 };

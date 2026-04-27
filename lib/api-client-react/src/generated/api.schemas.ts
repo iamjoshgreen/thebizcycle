@@ -194,3 +194,102 @@ export interface RecessionPayload {
   notes: string[];
   lastUpdated: number;
 }
+
+export type CyclicalComponentId =
+  (typeof CyclicalComponentId)[keyof typeof CyclicalComponentId];
+
+export const CyclicalComponentId = {
+  durableGoods: "durableGoods",
+  residentialInvestment: "residentialInvestment",
+  businessEquipment: "businessEquipment",
+} as const;
+
+export interface CyclicalComponent {
+  id: CyclicalComponentId;
+  label: string;
+  series: string;
+  /** Latest level in billions of chained 2017 dollars (SAAR) */
+  latestLevel: number | null;
+  /** Latest quarter-over-quarter annualized growth (%) */
+  qoqAnnPct: number | null;
+  /** Year-over-year growth (%) */
+  yoyPct: number | null;
+  /** Latest level as a share of Real GDP (%) */
+  shareOfGdpPct: number | null;
+  /** Share of quarters this component contracted (QoQ ann < 0) since 1956 */
+  contractionPctSince1956: number | null;
+}
+
+export interface CyclicalGrowthPoint {
+  /** Unix seconds, first day of quarter UTC */
+  time: number;
+  /** QoQ annualized growth in % */
+  value: number;
+}
+
+export interface CyclicalContractionStats {
+  /** Share of quarters cyclical GDP contracted since 1956 (%) */
+  cyclicalPct: number | null;
+  /** Share of quarters Real GDP contracted since 1956 (%) */
+  totalGdpPct: number | null;
+  /** Share of quarters non-cyclical GDP contracted since 1956 (%) */
+  nonCyclicalPct: number | null;
+  /** First year included in the contraction-frequency stats */
+  sinceYear: number;
+  quartersCounted: number;
+}
+
+export type CyclicalStatus =
+  (typeof CyclicalStatus)[keyof typeof CyclicalStatus];
+
+export const CyclicalStatus = {
+  strong: "strong",
+  expansion: "expansion",
+  decelerating: "decelerating",
+  contraction: "contraction",
+  insufficient: "insufficient",
+} as const;
+
+export type CyclicalPayloadRecentSequenceItem = {
+  time: number;
+  quarterLabel: string;
+  value: number | null;
+};
+
+export interface CyclicalPayload {
+  /** Unix seconds, first day of latest quarter UTC */
+  latestQuarter: number | null;
+  /** Human label like "2026 Q1" */
+  latestQuarterLabel: string;
+  /** Latest QoQ annualized growth of cyclical GDP (%) */
+  latestQoqAnnPct: number | null;
+  latestYoyPct: number | null;
+  status: CyclicalStatus;
+  statusLabel: string;
+  statusBlurb: string;
+  /** Most recent up to 4 quarters of cyclical QoQ ann growth, oldest first */
+  recentSequence: CyclicalPayloadRecentSequenceItem[];
+  components: CyclicalComponent[];
+  /** Cyclical GDP as share of Real GDP, latest quarter (%) */
+  cyclicalSharePct: number | null;
+  /** QoQ annualized growth of cyclical GDP, all quarters available */
+  cyclicalGrowthHistory: CyclicalGrowthPoint[];
+  totalGdpGrowthHistory: CyclicalGrowthPoint[];
+  nonCyclicalGrowthHistory: CyclicalGrowthPoint[];
+  /** 4-quarter trailing average of cyclical QoQ ann growth */
+  cyclicalMa4History: CyclicalGrowthPoint[];
+  nberRecessions: NberRecessionInterval[];
+  contractionStats: CyclicalContractionStats;
+  partialData: boolean;
+  notes: string[];
+  lastUpdated: number;
+}
+
+/**
+ * One quarter entry in recentSequence; defined here so Zod can be regenerated cleanly.
+ */
+export interface CyclicalQuarterEntry {
+  time: number;
+  quarterLabel: string;
+  value: number | null;
+}
