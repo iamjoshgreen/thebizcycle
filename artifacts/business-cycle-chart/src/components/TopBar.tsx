@@ -13,6 +13,7 @@ const TABS: { path: string; label: string }[] = [
   { path: "/channel", label: "Channel" },
   { path: "/housing", label: "Housing" },
   { path: "/recession", label: "Recession" },
+  { path: "/cyclical", label: "Cyclical GDP" },
 ];
 
 function formatTimestamp(unix: number): string {

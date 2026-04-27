@@ -7,6 +7,7 @@ import FractalPage from "@/pages/FractalPage";
 import ChannelPage from "@/pages/ChannelPage";
 import HousingPage from "@/pages/HousingPage";
 import RecessionPage from "@/pages/RecessionPage";
+import CyclicalPage from "@/pages/CyclicalPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,6 +26,7 @@ function Router() {
       <Route path="/channel" component={ChannelPage} />
       <Route path="/housing" component={HousingPage} />
       <Route path="/recession" component={RecessionPage} />
+      <Route path="/cyclical" component={CyclicalPage} />
     </Switch>
   );
 }

@@ -339,6 +339,20 @@ function buildNonCyclicalGrowth(
   return out;
 }
 
+// Convert a QoQ-annualized growth history to a year-over-year history by
+// compounding 4 consecutive quarters: (Π (1+g_i/100)^(1/4)) - 1
+function toYoyHistory(history: CyclicalGrowthPoint[]): CyclicalGrowthPoint[] {
+  const out: CyclicalGrowthPoint[] = [];
+  for (let i = 3; i < history.length; i++) {
+    let prod = 1;
+    for (let k = 0; k < 4; k++) {
+      prod *= Math.pow(1 + history[i - k].value / 100, 1 / 4);
+    }
+    out.push({ time: history[i].time, value: (prod - 1) * 100 });
+  }
+  return out;
+}
+
 function buildMa4(history: CyclicalGrowthPoint[]): CyclicalGrowthPoint[] {
   const out: CyclicalGrowthPoint[] = [];
   for (let i = 3; i < history.length; i++) {
@@ -539,7 +553,15 @@ export async function fetchCyclicalPayload(): Promise<CyclicalPayload> {
   if (!weights) notes.push("Could not derive component weights from level series");
 
   // Cyclical growth history (all quarters where the 3 growth series intersect)
-  const cyclicalGrowth = buildCyclicalGrowth(durGrowth, resGrowth, eqGrowth, weights);
+  const cyclicalGrowth = buildCyclicalGrowth(
+    durGrowth,
+    resGrowth,
+    eqGrowth,
+    weights,
+    durLevel,
+    resLevel,
+    eqLevel
+  );
   const cyclicalMa4 = buildMa4(cyclicalGrowth);
 
   // Total GDP growth, restricted to the same quarters as cyclical (so x-axes line up)
@@ -609,10 +631,16 @@ export async function fetchCyclicalPayload(): Promise<CyclicalPayload> {
     summarizeComponent(COMPONENTS[2], eqGrowth, eqLevel, gdpLevel, latestQuarter),
   ];
 
-  // Contraction-frequency stats since 1956
-  const cycPct = pctNegativeSince(cyclicalGrowth, STATS_SINCE_YEAR);
-  const totPct = pctNegativeSince(totalGdpGrowth, STATS_SINCE_YEAR);
-  const ncPct = pctNegativeSince(nonCyclicalGrowth, STATS_SINCE_YEAR);
+  // Contraction-frequency stats since 1956 — YoY based (matches EPB framing).
+  // For each quarter we compose 4 consecutive QoQ-annualized growth rates
+  // into a YoY %, then count quarters where YoY < 0.
+  const cyclicalYoy = toYoyHistory(cyclicalGrowth);
+  const totalGdpYoy = toYoyHistory(totalGdpGrowth);
+  const nonCyclicalYoy = toYoyHistory(nonCyclicalGrowth);
+
+  const cycPct = pctNegativeSince(cyclicalYoy, STATS_SINCE_YEAR);
+  const totPct = pctNegativeSince(totalGdpYoy, STATS_SINCE_YEAR);
+  const ncPct = pctNegativeSince(nonCyclicalYoy, STATS_SINCE_YEAR);
 
   const contractionStats: CyclicalContractionStats = {
     cyclicalPct: cycPct.pct,
