@@ -1,10 +1,21 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useGetChart, useRefreshChart } from "@workspace/api-client-react";
 import TopBar from "@/components/TopBar";
 import Chart, { OVERLAY_CONFIG, type ChartHandle, type MeasureResult, type Overlays } from "@/components/Chart";
 import { useToast } from "@/hooks/use-toast";
+import { usePersistedSettings } from "@/hooks/use-persisted-settings";
 
 const EMPTY: Overlays = { spx: [], oil: [], unrate: [], fedfunds: [], dgs10: [], t10y2y: [], btc: [], cpi: [] };
+
+interface ChartSettings {
+  activeOverlays: string[];
+  lastMeasure: MeasureResult | null;
+}
+
+const DEFAULT_CHART_SETTINGS: ChartSettings = {
+  activeOverlays: ["spx"],
+  lastMeasure: null,
+};
 
 function formatTs(ts: number): string {
   const d = new Date(ts * 1000);
@@ -22,9 +33,16 @@ export default function ChartPage() {
   const refreshMutation = useRefreshChart();
   const chartRef = useRef<ChartHandle>(null);
 
-  const [activeOverlays, setActiveOverlays] = useState<Set<keyof Overlays>>(new Set(["spx"]));
+  const { value: persisted, setValue: setPersisted } = usePersistedSettings<ChartSettings>(
+    "chart_page",
+    DEFAULT_CHART_SETTINGS,
+  );
+  const activeOverlays = useMemo<Set<keyof Overlays>>(
+    () => new Set(persisted.activeOverlays as (keyof Overlays)[]),
+    [persisted.activeOverlays],
+  );
+  const measureResult = persisted.lastMeasure;
   const [measureActive, setMeasureActive] = useState(false);
-  const [measureResult, setMeasureResult] = useState<MeasureResult | null>(null);
   // Track whether we're waiting for the second click
   const [measureStep, setMeasureStep] = useState<0 | 1>(0);
 
@@ -37,32 +55,32 @@ export default function ChartPage() {
   }, [refreshMutation, toast]);
 
   const toggleOverlay = useCallback((id: keyof Overlays) => {
-    setActiveOverlays((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
+    setPersisted((prev) => {
+      const set = new Set(prev.activeOverlays);
+      if (set.has(id)) set.delete(id);
+      else set.add(id);
+      return { ...prev, activeOverlays: Array.from(set) };
     });
-  }, []);
+  }, [setPersisted]);
 
   const toggleMeasure = useCallback(() => {
     setMeasureActive((v) => {
       if (v) {
-        setMeasureResult(null);
+        setPersisted((prev) => ({ ...prev, lastMeasure: null }));
         setMeasureStep(0);
       }
       return !v;
     });
-  }, []);
+  }, [setPersisted]);
 
   const handleMeasure = useCallback((result: MeasureResult | null) => {
-    setMeasureResult(result);
+    setPersisted((prev) => ({ ...prev, lastMeasure: result }));
     if (result == null) {
       setMeasureStep(1); // waiting for 2nd click
     } else {
       setMeasureStep(0); // done — ready for new pair
     }
-  }, []);
+  }, [setPersisted]);
 
   const payload = refreshMutation.data ?? chartData;
   const composite = payload?.composite ?? [];

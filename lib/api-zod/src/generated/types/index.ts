@@ -33,3 +33,7 @@ export * from "./sectorStats";
 export * from "./sectorStatsId";
 export * from "./sectorStatsRole";
 export * from "./sectorStatsStatus";
+export * from "./settingsPayload";
+export * from "./settingsPayloadValue";
+export * from "./settingsWriteBody";
+export * from "./settingsWriteBodyValue";

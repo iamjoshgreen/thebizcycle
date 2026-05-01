@@ -12,6 +12,8 @@ tags:
     description: Health operations
   - name: chart
     description: Chart data operations
+  - name: settings
+    description: Per-page user settings persistence
 paths:
   /healthz:
     get:
@@ -123,6 +125,42 @@ paths:
               schema:
                 $ref: "#/components/schemas/CyclicalPayload"
 
+  /settings/{key}:
+    parameters:
+      - name: key
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: getSetting
+      tags: [settings]
+      summary: Get a stored settings blob by key
+      responses:
+        "200":
+          description: Settings payload (value is null when nothing has ever been saved for this key)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettingsPayload"
+    put:
+      operationId: putSetting
+      tags: [settings]
+      summary: Save a settings blob by key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingsWriteBody"
+      responses:
+        "200":
+          description: Updated settings payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettingsPayload"
+
   /cyclical/refresh:
     post:
       operationId: refreshCyclical
@@ -138,6 +176,31 @@ paths:
 
 components:
   schemas:
+    SettingsPayload:
+      type: object
+      properties:
+        value:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: Free-form settings JSON object, or null if nothing has been saved yet
+        updatedAt:
+          type: number
+          description: Unix timestamp in seconds, 0 when no value has been saved
+      required:
+        - value
+        - updatedAt
+
+    SettingsWriteBody:
+      type: object
+      properties:
+        value:
+          type: object
+          additionalProperties: true
+          description: Free-form settings JSON object to save
+      required:
+        - value
+
     HealthStatus:
       type: object
       properties:

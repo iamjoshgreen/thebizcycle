@@ -12,11 +12,28 @@ import {
 } from "lightweight-charts";
 import TopBar from "@/components/TopBar";
 import { useToast } from "@/hooks/use-toast";
+import { usePersistedSettings } from "@/hooks/use-persisted-settings";
 
 const FRACTAL_START_ISO = "1994-11-18";
 const FRACTAL_END_ISO = "2002-10-04";
 const DEFAULT_RECENT_START_ISO = "2012-03-06";
 const DEFAULT_ANCHOR_ISO = "2021-05-25";
+
+interface FractalMeasurePoint { time: number; price: number }
+interface FractalSettings {
+  anchorDate: string;
+  recentStartDate: string;
+  yScale: number;
+  pointA: FractalMeasurePoint | null;
+  pointB: FractalMeasurePoint | null;
+}
+const DEFAULT_FRACTAL_SETTINGS: FractalSettings = {
+  anchorDate: DEFAULT_ANCHOR_ISO,
+  recentStartDate: DEFAULT_RECENT_START_ISO,
+  yScale: 0.64,
+  pointA: null,
+  pointB: null,
+};
 
 function isoToUnix(iso: string): number {
   return Math.floor(new Date(iso + "T00:00:00Z").getTime() / 1000);
@@ -44,15 +61,35 @@ export default function FractalPage() {
   const recentSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const fractalSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
 
-  const [anchorDate, setAnchorDate] = useState(DEFAULT_ANCHOR_ISO);
-  const [recentStartDate, setRecentStartDate] = useState(DEFAULT_RECENT_START_ISO);
-  const [yScale, setYScale] = useState(0.64);
+  const { value: persisted, setValue: setPersisted } = usePersistedSettings<FractalSettings>(
+    "fractal_page",
+    DEFAULT_FRACTAL_SETTINGS,
+  );
+  const { anchorDate, recentStartDate, yScale, pointA, pointB } = persisted;
+  const setAnchorDate = useCallback(
+    (v: string) => setPersisted((p) => ({ ...p, anchorDate: v })),
+    [setPersisted],
+  );
+  const setRecentStartDate = useCallback(
+    (v: string) => setPersisted((p) => ({ ...p, recentStartDate: v })),
+    [setPersisted],
+  );
+  const setYScale = useCallback(
+    (v: number) => setPersisted((p) => ({ ...p, yScale: v })),
+    [setPersisted],
+  );
 
   // --- Measure tool state ---
-  type MeasurePoint = { time: number; price: number };
+  type MeasurePoint = FractalMeasurePoint;
   const [measureMode, setMeasureMode] = useState(false);
-  const [pointA, setPointA] = useState<MeasurePoint | null>(null);
-  const [pointB, setPointB] = useState<MeasurePoint | null>(null);
+  const setPointA = useCallback(
+    (v: MeasurePoint | null) => setPersisted((p) => ({ ...p, pointA: v })),
+    [setPersisted],
+  );
+  const setPointB = useCallback(
+    (v: MeasurePoint | null) => setPersisted((p) => ({ ...p, pointB: v })),
+    [setPersisted],
+  );
   const [cursor, setCursor] = useState<MeasurePoint | null>(null);
   const anchorLineARef = useRef<IPriceLine | null>(null);
   const anchorLineBRef = useRef<IPriceLine | null>(null);

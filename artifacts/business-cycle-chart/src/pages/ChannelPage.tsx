@@ -14,6 +14,7 @@ import {
 } from "lightweight-charts";
 import TopBar from "@/components/TopBar";
 import { useToast } from "@/hooks/use-toast";
+import { usePersistedSettings } from "@/hooks/use-persisted-settings";
 
 const SPX_START_ISO = "2018-01-01";       // SPX history shown
 const CHANNEL_START_ISO = "2020-02-01";   // channel only valid from here
@@ -173,6 +174,30 @@ class ChannelBandPrimitive {
   }
 }
 
+// ─── Persisted settings shape ────────────────────────────────────────────────
+
+interface ChannelMeasurePoint { time: number; price: number }
+interface ChannelSettings {
+  aDate: string;
+  aPrice: string;
+  bDate: string;
+  bPrice: string;
+  cDate: string;
+  cPrice: string;
+  pointA: ChannelMeasurePoint | null;
+  pointB: ChannelMeasurePoint | null;
+}
+const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
+  aDate: DEFAULT_A_DATE,
+  aPrice: String(DEFAULT_A_PRICE),
+  bDate: DEFAULT_B_DATE,
+  bPrice: String(DEFAULT_B_PRICE),
+  cDate: DEFAULT_C_DATE,
+  cPrice: String(DEFAULT_C_PRICE),
+  pointA: null,
+  pointB: null,
+};
+
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function ChannelPage() {
@@ -188,18 +213,29 @@ export default function ChannelPage() {
   const midSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const primitiveRef = useRef<ChannelBandPrimitive | null>(null);
 
-  const [aDate, setADate] = useState(DEFAULT_A_DATE);
-  const [aPrice, setAPrice] = useState(String(DEFAULT_A_PRICE));
-  const [bDate, setBDate] = useState(DEFAULT_B_DATE);
-  const [bPrice, setBPrice] = useState(String(DEFAULT_B_PRICE));
-  const [cDate, setCDate] = useState(DEFAULT_C_DATE);
-  const [cPrice, setCPrice] = useState(String(DEFAULT_C_PRICE));
+  const { value: persisted, setValue: setPersisted } = usePersistedSettings<ChannelSettings>(
+    "channel_page",
+    DEFAULT_CHANNEL_SETTINGS,
+  );
+  const { aDate, aPrice, bDate, bPrice, cDate, cPrice, pointA, pointB } = persisted;
+  const setADate = useCallback((v: string) => setPersisted((p) => ({ ...p, aDate: v })), [setPersisted]);
+  const setAPrice = useCallback((v: string) => setPersisted((p) => ({ ...p, aPrice: v })), [setPersisted]);
+  const setBDate = useCallback((v: string) => setPersisted((p) => ({ ...p, bDate: v })), [setPersisted]);
+  const setBPrice = useCallback((v: string) => setPersisted((p) => ({ ...p, bPrice: v })), [setPersisted]);
+  const setCDate = useCallback((v: string) => setPersisted((p) => ({ ...p, cDate: v })), [setPersisted]);
+  const setCPrice = useCallback((v: string) => setPersisted((p) => ({ ...p, cPrice: v })), [setPersisted]);
 
   // --- Measure tool state ---
-  type MeasurePoint = { time: number; price: number };
+  type MeasurePoint = ChannelMeasurePoint;
   const [measureMode, setMeasureMode] = useState(false);
-  const [pointA, setPointA] = useState<MeasurePoint | null>(null);
-  const [pointB, setPointB] = useState<MeasurePoint | null>(null);
+  const setPointA = useCallback(
+    (v: MeasurePoint | null) => setPersisted((p) => ({ ...p, pointA: v })),
+    [setPersisted],
+  );
+  const setPointB = useCallback(
+    (v: MeasurePoint | null) => setPersisted((p) => ({ ...p, pointB: v })),
+    [setPersisted],
+  );
   const [cursor, setCursor] = useState<MeasurePoint | null>(null);
   const anchorLineARef = useRef<IPriceLine | null>(null);
   const anchorLineBRef = useRef<IPriceLine | null>(null);

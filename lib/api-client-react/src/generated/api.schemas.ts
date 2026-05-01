@@ -5,6 +5,28 @@
  * Business Cycle Chart API
  * OpenAPI spec version: 0.1.0
  */
+/**
+ * Free-form settings JSON object, or null if nothing has been saved yet
+ */
+export type SettingsPayloadValue = { [key: string]: unknown } | null;
+
+export interface SettingsPayload {
+  /** Free-form settings JSON object, or null if nothing has been saved yet */
+  value: SettingsPayloadValue;
+  /** Unix timestamp in seconds, 0 when no value has been saved */
+  updatedAt: number;
+}
+
+/**
+ * Free-form settings JSON object to save
+ */
+export type SettingsWriteBodyValue = { [key: string]: unknown };
+
+export interface SettingsWriteBody {
+  /** Free-form settings JSON object to save */
+  value: SettingsWriteBodyValue;
+}
+
 export interface HealthStatus {
   status: string;
 }

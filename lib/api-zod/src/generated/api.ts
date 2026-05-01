@@ -522,6 +522,50 @@ export const GetCyclicalResponse = zod.object({
 });
 
 /**
+ * @summary Get a stored settings blob by key
+ */
+export const GetSettingParams = zod.object({
+  key: zod.coerce.string(),
+});
+
+export const GetSettingResponse = zod.object({
+  value: zod
+    .record(zod.string(), zod.unknown())
+    .nullable()
+    .describe(
+      "Free-form settings JSON object, or null if nothing has been saved yet",
+    ),
+  updatedAt: zod
+    .number()
+    .describe("Unix timestamp in seconds, 0 when no value has been saved"),
+});
+
+/**
+ * @summary Save a settings blob by key
+ */
+export const PutSettingParams = zod.object({
+  key: zod.coerce.string(),
+});
+
+export const PutSettingBody = zod.object({
+  value: zod
+    .record(zod.string(), zod.unknown())
+    .describe("Free-form settings JSON object to save"),
+});
+
+export const PutSettingResponse = zod.object({
+  value: zod
+    .record(zod.string(), zod.unknown())
+    .nullable()
+    .describe(
+      "Free-form settings JSON object, or null if nothing has been saved yet",
+    ),
+  updatedAt: zod
+    .number()
+    .describe("Unix timestamp in seconds, 0 when no value has been saved"),
+});
+
+/**
  * @summary Force refresh cyclical GDP data
  */
 export const RefreshCyclicalResponse = zod.object({
