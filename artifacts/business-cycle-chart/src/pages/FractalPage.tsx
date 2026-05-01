@@ -545,8 +545,12 @@ export default function FractalPage() {
         </label>
 
         <button
-          onClick={() => setYScale(1.0)}
-          title="Reset Y-scale to 1.0 (anchor-only scaling)"
+          onClick={() => {
+            setAnchorDate(DEFAULT_ANCHOR_ISO);
+            setRecentStartDate(DEFAULT_RECENT_START_ISO);
+            setYScale(DEFAULT_FRACTAL_SETTINGS.yScale);
+          }}
+          title="Reset fractal anchors and Y-scale to defaults"
           style={{
             padding: "3px 8px",
             borderRadius: "4px",
@@ -557,7 +561,7 @@ export default function FractalPage() {
             border: "1px solid hsl(230 10% 18%)",
             color: "rgba(200,200,220,0.5)",
           }}
-          data-testid="button-reset-yscale"
+          data-testid="button-reset-fractal"
         >
           Reset
         </button>
