@@ -8,6 +8,8 @@ export interface PersistedSettings<T> {
   setValue: (next: Updater<T>) => void;
   ready: boolean;
   isSaving: boolean;
+  /** True when the most recent settled save failed. Resets when a new save starts. */
+  saveError: boolean;
 }
 
 const DEBOUNCE_MS = 400;
@@ -138,5 +140,49 @@ export function usePersistedSettings<T extends object>(
     };
   }, []);
 
-  return { value, setValue, ready, isSaving: putMutation.isPending };
+  return {
+    value,
+    setValue,
+    ready,
+    isSaving: putMutation.isPending,
+    // `isError` reflects the most recent settled mutation; react-query clears
+    // it when a new mutation starts, which matches the semantics we want.
+    saveError: putMutation.isError && !putMutation.isPending,
+  };
 }
+
+export type SaveStatus = "idle" | "saving" | "saved" | "error";
+
+const SAVED_LINGER_MS = 1500;
+const ERROR_LINGER_MS = 4000;
+
+/**
+ * Convert the persisted-settings save signals into a sticky four-state label
+ * for a "Saving…" / "Saved" / "Save failed" indicator in the top bar.
+ *
+ * - While a write is in flight, returns "saving".
+ * - On the falling edge of `isSaving`:
+ *   - if `saveError` is true → "error" for ~4s, then "idle"
+ *   - otherwise → "saved" for ~1.5s, then "idle"
+ * - Returns "idle" until the first save completes.
+ */
+export function useSaveStatus(isSaving: boolean, saveError: boolean = false): SaveStatus {
+  const [status, setStatus] = useState<SaveStatus>("idle");
+  const wasSavingRef = useRef(false);
+
+  useEffect(() => {
+    if (isSaving) {
+      wasSavingRef.current = true;
+      setStatus("saving");
+      return;
+    }
+    if (!wasSavingRef.current) return;
+    const isError = saveError;
+    setStatus(isError ? "error" : "saved");
+    const t = setTimeout(() => setStatus("idle"), isError ? ERROR_LINGER_MS : SAVED_LINGER_MS);
+    return () => clearTimeout(t);
+  }, [isSaving, saveError]);
+
+  return status;
+}
+

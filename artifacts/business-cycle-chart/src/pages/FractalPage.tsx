@@ -12,7 +12,7 @@ import {
 } from "lightweight-charts";
 import TopBar from "@/components/TopBar";
 import { useToast } from "@/hooks/use-toast";
-import { usePersistedSettings } from "@/hooks/use-persisted-settings";
+import { usePersistedSettings, useSaveStatus } from "@/hooks/use-persisted-settings";
 
 const FRACTAL_START_ISO = "1994-11-18";
 const FRACTAL_END_ISO = "2002-10-04";
@@ -61,10 +61,11 @@ export default function FractalPage() {
   const recentSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const fractalSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
 
-  const { value: persisted, setValue: setPersisted } = usePersistedSettings<FractalSettings>(
+  const { value: persisted, setValue: setPersisted, isSaving, saveError } = usePersistedSettings<FractalSettings>(
     "fractal_page",
     DEFAULT_FRACTAL_SETTINGS,
   );
+  const saveStatus = useSaveStatus(isSaving, saveError);
   const { anchorDate, recentStartDate, yScale, pointA, pointB } = persisted;
   const setAnchorDate = useCallback(
     (v: string) => setPersisted((p) => ({ ...p, anchorDate: v })),
@@ -455,6 +456,7 @@ export default function FractalPage() {
         lastUpdated={lastUpdated ?? null}
         isRefreshing={refreshMutation.isPending}
         onRefresh={handleRefresh}
+        saveStatus={saveStatus}
       />
 
       {/* Controls row */}

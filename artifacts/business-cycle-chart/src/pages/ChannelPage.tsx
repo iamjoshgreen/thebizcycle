@@ -14,7 +14,7 @@ import {
 } from "lightweight-charts";
 import TopBar from "@/components/TopBar";
 import { useToast } from "@/hooks/use-toast";
-import { usePersistedSettings } from "@/hooks/use-persisted-settings";
+import { usePersistedSettings, useSaveStatus } from "@/hooks/use-persisted-settings";
 
 const SPX_START_ISO = "2018-01-01";       // SPX history shown
 const CHANNEL_START_ISO = "2020-02-01";   // channel only valid from here
@@ -213,10 +213,11 @@ export default function ChannelPage() {
   const midSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
   const primitiveRef = useRef<ChannelBandPrimitive | null>(null);
 
-  const { value: persisted, setValue: setPersisted } = usePersistedSettings<ChannelSettings>(
+  const { value: persisted, setValue: setPersisted, isSaving, saveError } = usePersistedSettings<ChannelSettings>(
     "channel_page",
     DEFAULT_CHANNEL_SETTINGS,
   );
+  const saveStatus = useSaveStatus(isSaving, saveError);
   const { aDate, aPrice, bDate, bPrice, cDate, cPrice, pointA, pointB } = persisted;
   const setADate = useCallback((v: string) => setPersisted((p) => ({ ...p, aDate: v })), [setPersisted]);
   const setAPrice = useCallback((v: string) => setPersisted((p) => ({ ...p, aPrice: v })), [setPersisted]);
@@ -717,6 +718,7 @@ export default function ChannelPage() {
         lastUpdated={lastUpdated}
         isRefreshing={refreshMutation.isPending}
         onRefresh={handleRefresh}
+        saveStatus={saveStatus}
       />
 
       {/* Controls bar */}

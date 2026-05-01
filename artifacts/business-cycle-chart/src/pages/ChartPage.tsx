@@ -3,7 +3,7 @@ import { useGetChart, useRefreshChart } from "@workspace/api-client-react";
 import TopBar from "@/components/TopBar";
 import Chart, { OVERLAY_CONFIG, type ChartHandle, type MeasureResult, type Overlays } from "@/components/Chart";
 import { useToast } from "@/hooks/use-toast";
-import { usePersistedSettings } from "@/hooks/use-persisted-settings";
+import { usePersistedSettings, useSaveStatus } from "@/hooks/use-persisted-settings";
 
 const EMPTY: Overlays = { spx: [], oil: [], unrate: [], fedfunds: [], dgs10: [], t10y2y: [], btc: [], cpi: [] };
 
@@ -33,10 +33,11 @@ export default function ChartPage() {
   const refreshMutation = useRefreshChart();
   const chartRef = useRef<ChartHandle>(null);
 
-  const { value: persisted, setValue: setPersisted } = usePersistedSettings<ChartSettings>(
+  const { value: persisted, setValue: setPersisted, isSaving, saveError } = usePersistedSettings<ChartSettings>(
     "chart_page",
     DEFAULT_CHART_SETTINGS,
   );
+  const saveStatus = useSaveStatus(isSaving, saveError);
   const activeOverlays = useMemo<Set<keyof Overlays>>(
     () => new Set(persisted.activeOverlays as (keyof Overlays)[]),
     [persisted.activeOverlays],
@@ -98,6 +99,7 @@ export default function ChartPage() {
         lastUpdated={lastUpdated ?? null}
         isRefreshing={refreshMutation.isPending}
         onRefresh={handleRefresh}
+        saveStatus={saveStatus}
       />
 
       {/* Tool / Overlay bar */}

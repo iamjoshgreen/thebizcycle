@@ -1,10 +1,80 @@
-import { RefreshCw } from "lucide-react";
+import { useRef, type ReactElement } from "react";
+import { AlertTriangle, Check, Loader2, RefreshCw } from "lucide-react";
 import { Link, useLocation } from "wouter";
+import type { SaveStatus } from "@/hooks/use-persisted-settings";
 
 interface TopBarProps {
   lastUpdated: number | null;
   isRefreshing: boolean;
   onRefresh: () => void;
+  saveStatus?: SaveStatus;
+}
+
+interface IndicatorContent {
+  icon: ReactElement;
+  label: string;
+  color: string;
+}
+
+function contentFor(status: Exclude<SaveStatus, "idle">): IndicatorContent {
+  if (status === "saving") {
+    return {
+      icon: <Loader2 size={11} className="animate-spin" aria-hidden="true" />,
+      label: "Saving…",
+      color: "hsl(220 10% 55%)",
+    };
+  }
+  if (status === "error") {
+    return {
+      icon: <AlertTriangle size={11} aria-hidden="true" />,
+      label: "Save failed",
+      color: "hsl(0 70% 60%)",
+    };
+  }
+  return {
+    icon: <Check size={11} aria-hidden="true" />,
+    label: "Saved",
+    color: "hsl(142 60% 55%)",
+  };
+}
+
+/**
+ * Renders the save indicator with a fixed-width slot at sm+ to avoid layout
+ * shift on the adjacent "Updated …" text + Refresh button. When status is
+ * "idle", we keep the *last* non-idle content mounted but invisible so the
+ * fade-out is smooth and the slot width stays reserved.
+ */
+function SaveIndicator({ status }: { status: SaveStatus }) {
+  const lastContentRef = useRef<IndicatorContent | null>(null);
+  if (status !== "idle") {
+    lastContentRef.current = contentFor(status);
+  }
+  const content = lastContentRef.current;
+  const visible = status !== "idle";
+  return (
+    <span
+      className="hidden sm:inline-flex items-center gap-1 text-xs justify-end"
+      style={{
+        color: content?.color ?? "transparent",
+        fontFamily: "'Inter', sans-serif",
+        letterSpacing: "-0.005em",
+        transition: "opacity 220ms ease, color 220ms ease",
+        opacity: visible ? 1 : 0,
+        minWidth: "5.25rem",
+      }}
+      data-testid="save-indicator"
+      data-status={status}
+      aria-live="polite"
+      aria-hidden={!visible}
+    >
+      {content ? (
+        <>
+          {content.icon}
+          {content.label}
+        </>
+      ) : null}
+    </span>
+  );
 }
 
 const TABS: { path: string; label: string }[] = [
@@ -58,7 +128,7 @@ function Tabs() {
   );
 }
 
-export default function TopBar({ lastUpdated, isRefreshing, onRefresh }: TopBarProps) {
+export default function TopBar({ lastUpdated, isRefreshing, onRefresh, saveStatus = "idle" }: TopBarProps) {
   return (
     <header
       className="flex items-center justify-between px-5 h-11 shrink-0 border-b"
@@ -71,9 +141,10 @@ export default function TopBar({ lastUpdated, isRefreshing, onRefresh }: TopBarP
       {/* Left — title + tabs */}
       <Tabs />
 
-      {/* Right — last updated + refresh, grouped so "Updated…" never collides
-          with the tabs as they grow on wider routes. */}
+      {/* Right — save indicator + last updated + refresh, grouped so they
+          never collide with the tabs as they grow on wider routes. */}
       <div className="flex items-center gap-3">
+        <SaveIndicator status={saveStatus} />
         {lastUpdated ? (
           <span
             className="text-xs hidden sm:inline"
