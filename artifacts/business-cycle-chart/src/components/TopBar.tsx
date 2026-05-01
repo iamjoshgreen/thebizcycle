@@ -44,7 +44,7 @@ function contentFor(status: Exclude<SaveStatus, "idle">): IndicatorContent {
  * "idle", we keep the *last* non-idle content mounted but invisible so the
  * fade-out is smooth and the slot width stays reserved.
  */
-function SaveIndicator({ status }: { status: SaveStatus }) {
+export function SaveIndicator({ status }: { status: SaveStatus }) {
   const lastContentRef = useRef<IndicatorContent | null>(null);
   if (status !== "idle") {
     lastContentRef.current = contentFor(status);
