@@ -53,14 +53,13 @@ function SaveIndicator({ status }: { status: SaveStatus }) {
   const visible = status !== "idle";
   return (
     <span
-      className="hidden sm:inline-flex items-center gap-1 text-xs justify-end"
+      className="inline-flex items-center gap-1 text-xs justify-end"
       style={{
         color: content?.color ?? "transparent",
         fontFamily: "'Inter', sans-serif",
         letterSpacing: "-0.005em",
         transition: "opacity 220ms ease, color 220ms ease",
         opacity: visible ? 1 : 0,
-        minWidth: "5.25rem",
       }}
       data-testid="save-indicator"
       data-status={status}
@@ -70,7 +69,11 @@ function SaveIndicator({ status }: { status: SaveStatus }) {
       {content ? (
         <>
           {content.icon}
-          {content.label}
+          {/* Hide the text label on tiny viewports — the icon alone still
+              gives mobile users feedback without crowding the TopBar. */}
+          <span className="hidden sm:inline" style={{ minWidth: "4.25rem" }}>
+            {content.label}
+          </span>
         </>
       ) : null}
     </span>
