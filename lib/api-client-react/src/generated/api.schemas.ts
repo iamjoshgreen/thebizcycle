@@ -57,6 +57,8 @@ export interface Overlays {
 export interface ChartPayload {
   composite: DataPoint[];
   spx: DataPoint[];
+  /** SPX divided by M2 money supply (WM2NS), used for the dot-com fractal overlay. */
+  spxM2: DataPoint[];
   recessions: RecessionInterval[];
   overlays: Overlays;
   /** Unix timestamp in seconds when cache was populated */

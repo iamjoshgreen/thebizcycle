@@ -245,6 +245,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DataPoint"
+        spxM2:
+          type: array
+          description: SPX divided by M2 money supply (WM2NS), used for the dot-com fractal overlay.
+          items:
+            $ref: "#/components/schemas/DataPoint"
         recessions:
           type: array
           items:
@@ -257,6 +262,7 @@ components:
       required:
         - composite
         - spx
+        - spxM2
         - recessions
         - overlays
         - lastUpdated

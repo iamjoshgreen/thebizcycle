@@ -196,7 +196,7 @@ const Chart = forwardRef<ChartHandle, ChartProps>(function Chart(
     compositeSeries.current = chart.addSeries(LineSeries, {
       priceScaleId: "left",
       color: "#2962FF",
-      lineWidth: 1.5,
+      lineWidth: 2,
       crosshairMarkerVisible: true,
       crosshairMarkerRadius: 3,
       crosshairMarkerBackgroundColor: "#2962FF",

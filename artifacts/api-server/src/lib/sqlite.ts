@@ -42,7 +42,7 @@ export function getDb(): Database.Database {
 // changes. Bump CACHE_BUST_VERSION whenever a fix changes the *meaning* of
 // cached values (e.g. the period2 fix that made today's SPX close visible).
 // Each version runs at most once per database.
-const CACHE_BUST_VERSION = "v2_period2_fix_2026_04";
+const CACHE_BUST_VERSION = "v3_spxm2_required_2026_05";
 // Only invalidate caches whose meaning changed with this fix. The
 // recession_payload/housing_payload caches use FRED data (unaffected).
 const CACHE_BUST_KEYS = ["chart_payload"];

@@ -88,8 +88,8 @@ export default function ChartPage() {
   const lastUpdated = payload?.lastUpdated ?? null;
 
   const overlays: Overlays = {
-    spx: payload?.spx ?? [],
     ...((payload?.overlays as Overlays | undefined) ?? EMPTY),
+    spx: payload?.spx ?? [],
   };
 
   return (

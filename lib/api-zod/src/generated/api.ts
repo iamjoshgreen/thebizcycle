@@ -32,6 +32,16 @@ export const GetChartResponse = zod.object({
       value: zod.number(),
     }),
   ),
+  spxM2: zod
+    .array(
+      zod.object({
+        time: zod.number().describe("Unix timestamp in seconds (Friday close)"),
+        value: zod.number(),
+      }),
+    )
+    .describe(
+      "SPX divided by M2 money supply (WM2NS), used for the dot-com fractal overlay.",
+    ),
   recessions: zod.array(
     zod.object({
       start: zod.number().describe("Unix timestamp in seconds"),
@@ -104,6 +114,16 @@ export const RefreshChartResponse = zod.object({
       value: zod.number(),
     }),
   ),
+  spxM2: zod
+    .array(
+      zod.object({
+        time: zod.number().describe("Unix timestamp in seconds (Friday close)"),
+        value: zod.number(),
+      }),
+    )
+    .describe(
+      "SPX divided by M2 money supply (WM2NS), used for the dot-com fractal overlay.",
+    ),
   recessions: zod.array(
     zod.object({
       start: zod.number().describe("Unix timestamp in seconds"),
