@@ -80,6 +80,16 @@ export function usePersistedSettings<T extends object>(
   const flushRef = useRef(flush);
   flushRef.current = flush;
 
+  useEffect(() => {
+    if (!ready) return;
+    if (!dirtyRef.current) return;
+    if (debounceTimer.current) clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => {
+      debounceTimer.current = null;
+      flushRef.current();
+    }, DEBOUNCE_MS);
+  }, [ready]);
+
   const setValue = useCallback(
     (next: Updater<T>) => {
       setLocal((prev) => {
