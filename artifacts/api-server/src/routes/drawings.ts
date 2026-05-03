@@ -1,40 +1,47 @@
 import { Router } from "express";
-import { getDb } from "../lib/sqlite.js";
+import { db, drawingsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 const router = Router();
 
-// GET /api/drawings
-router.get("/drawings", (req, res) => {
+router.get("/drawings", async (req, res) => {
   try {
-    const db = getDb();
-    const row = db
-      .prepare("SELECT data, updated_at FROM drawings WHERE id = 1")
-      .get() as { data: string; updated_at: number } | undefined;
+    const rows = await db
+      .select()
+      .from(drawingsTable)
+      .where(eq(drawingsTable.id, 1))
+      .limit(1);
 
-    if (!row) {
+    if (rows.length === 0) {
       res.json({ data: null, updatedAt: 0 });
       return;
     }
 
-    res.json({ data: JSON.parse(row.data), updatedAt: row.updated_at });
+    const row = rows[0]!;
+    res.json({
+      data: row.data,
+      updatedAt: Math.floor(row.updatedAt.getTime() / 1000),
+    });
   } catch (err) {
     req.log.error({ err }, "Error reading drawings");
     res.status(500).json({ error: "Failed to read drawings" });
   }
 });
 
-// POST /api/drawings
-router.post("/drawings", (req, res) => {
+router.post("/drawings", async (req, res) => {
   try {
     const { data } = req.body as { data: unknown };
-    const now = Math.floor(Date.now() / 1000);
-    const db = getDb();
+    const now = new Date();
 
-    db.prepare(
-      "INSERT OR REPLACE INTO drawings (id, data, updated_at) VALUES (1, ?, ?)"
-    ).run(JSON.stringify(data), now);
+    await db
+      .insert(drawingsTable)
+      .values({ id: 1, data: data as object })
+      .onConflictDoUpdate({
+        target: drawingsTable.id,
+        set: { data: data as object, updatedAt: now },
+      });
 
-    res.json({ data, updatedAt: now });
+    res.json({ data, updatedAt: Math.floor(now.getTime() / 1000) });
   } catch (err) {
     req.log.error({ err }, "Error saving drawings");
     res.status(500).json({ error: "Failed to save drawings" });

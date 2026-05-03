@@ -1,9 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { runCacheBustIfNeeded } from "./lib/sqlite";
-
-// Invalidate cached payloads whose meaning changed with the latest fix
-runCacheBustIfNeeded();
+import { runCacheBustIfNeeded } from "./lib/cache";
 
 const rawPort = process.env["PORT"];
 
@@ -18,6 +15,11 @@ const port = Number(rawPort);
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
+
+// Invalidate cached payloads whose meaning changed with the latest fix
+runCacheBustIfNeeded().catch((err) => {
+  logger.error({ err }, "Cache bust failed");
+});
 
 app.listen(port, (err) => {
   if (err) {

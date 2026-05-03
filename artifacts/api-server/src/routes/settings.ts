@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { getDb } from "../lib/sqlite.js";
+import { db, settingsTable } from "@workspace/db";
+import { eq } from "drizzle-orm";
 
 const router = Router();
 
@@ -9,7 +10,7 @@ function isValidKey(key: unknown): key is string {
   return typeof key === "string" && KEY_RE.test(key);
 }
 
-router.get("/settings/:key", (req, res) => {
+router.get("/settings/:key", async (req, res) => {
   try {
     const { key } = req.params;
     if (!isValidKey(key)) {
@@ -17,31 +18,29 @@ router.get("/settings/:key", (req, res) => {
       return;
     }
 
-    const db = getDb();
-    const row = db
-      .prepare("SELECT value, updated_at FROM settings WHERE key = ?")
-      .get(key) as { value: string; updated_at: number } | undefined;
+    const rows = await db
+      .select()
+      .from(settingsTable)
+      .where(eq(settingsTable.key, key))
+      .limit(1);
 
-    if (!row) {
+    if (rows.length === 0) {
       res.json({ value: null, updatedAt: 0 });
       return;
     }
 
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(row.value);
-    } catch {
-      parsed = null;
-    }
-
-    res.json({ value: parsed, updatedAt: row.updated_at });
+    const row = rows[0]!;
+    res.json({
+      value: row.value,
+      updatedAt: Math.floor(row.updatedAt.getTime() / 1000),
+    });
   } catch (err) {
     req.log.error({ err }, "Error reading settings");
     res.status(500).json({ error: "Failed to read settings" });
   }
 });
 
-router.put("/settings/:key", (req, res) => {
+router.put("/settings/:key", async (req, res) => {
   try {
     const { key } = req.params;
     if (!isValidKey(key)) {
@@ -62,15 +61,16 @@ router.put("/settings/:key", (req, res) => {
       return;
     }
 
-    const now = Math.floor(Date.now() / 1000);
-    const serialized = JSON.stringify(body.value);
+    const now = new Date();
+    await db
+      .insert(settingsTable)
+      .values({ key, value: body.value as object })
+      .onConflictDoUpdate({
+        target: settingsTable.key,
+        set: { value: body.value as object, updatedAt: now },
+      });
 
-    const db = getDb();
-    db.prepare(
-      "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)"
-    ).run(key, serialized, now);
-
-    res.json({ value: body.value, updatedAt: now });
+    res.json({ value: body.value, updatedAt: Math.floor(now.getTime() / 1000) });
   } catch (err) {
     req.log.error({ err }, "Error saving settings");
     res.status(500).json({ error: "Failed to save settings" });
