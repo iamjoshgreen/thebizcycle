@@ -179,6 +179,14 @@
   .no-default-hover-elevate {}
   .no-default-active-elevate {}
 
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
   .toggle-elevate::before,
   .toggle-elevate-2::before {
     content: "";

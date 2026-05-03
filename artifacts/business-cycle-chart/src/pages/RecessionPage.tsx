@@ -618,7 +618,7 @@ export default function RecessionPage() {
         onRefresh={handleRefresh}
       />
 
-      <div className="flex-1 overflow-auto px-6 py-5">
+      <div className="flex-1 overflow-auto px-3 py-3 sm:px-6 sm:py-5">
         {isLoading && !payload && (
           <div className="flex flex-col items-center justify-center gap-3 py-20">
             <div
@@ -656,14 +656,15 @@ export default function RecessionPage() {
                 background: headlineColors.bg,
                 border: `1px solid ${headlineColors.border}`,
                 borderRadius: 12,
-                padding: "26px 30px",
+                padding: "clamp(16px, 4vw, 26px) clamp(16px, 4vw, 30px)",
                 display: "flex",
-                gap: 32,
+                gap: "clamp(14px, 3vw, 32px)",
                 alignItems: "center",
+                flexWrap: "wrap",
               }}
               data-testid="cji-headline"
             >
-              <div style={{ flexShrink: 0, minWidth: 220 }}>
+              <div style={{ flexShrink: 0, minWidth: 0 }}>
                 <div
                   style={{
                     color: "rgba(180,180,200,0.5)",
@@ -678,7 +679,7 @@ export default function RecessionPage() {
                   style={{
                     color: headlineColors.fg,
                     fontFamily: "'Inter', sans-serif",
-                    fontSize: 64,
+                    fontSize: "clamp(40px, 11vw, 64px)",
                     fontWeight: 800,
                     letterSpacing: "-0.03em",
                     lineHeight: 1,
@@ -782,7 +783,7 @@ export default function RecessionPage() {
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr 1fr 1fr",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
                 gap: 14,
               }}
               data-testid="strategy-explainer"

@@ -565,7 +565,7 @@ export default function CyclicalPage() {
       {payload && (
         <div
           style={{
-            padding: "20px 24px 32px",
+            padding: "clamp(12px, 3vw, 20px) clamp(12px, 3vw, 24px) clamp(20px, 4vw, 32px)",
             display: "flex",
             flexDirection: "column",
             gap: 20,
@@ -609,7 +609,7 @@ export default function CyclicalPage() {
                 </div>
                 <div
                   style={{
-                    fontSize: 28,
+                    fontSize: "clamp(20px, 5vw, 28px)",
                     fontWeight: 700,
                     color: "rgba(230,235,245,0.98)",
                     letterSpacing: "-0.02em",
@@ -638,7 +638,7 @@ export default function CyclicalPage() {
                   flexDirection: "column",
                   alignItems: "flex-end",
                   gap: 8,
-                  minWidth: 220,
+                  minWidth: 0,
                 }}
               >
                 <span
@@ -671,7 +671,7 @@ export default function CyclicalPage() {
                 </span>
                 <div
                   style={{
-                    fontSize: 48,
+                    fontSize: "clamp(32px, 8vw, 48px)",
                     fontWeight: 700,
                     fontFamily: "'JetBrains Mono', monospace",
                     color: headlineColors.fg,

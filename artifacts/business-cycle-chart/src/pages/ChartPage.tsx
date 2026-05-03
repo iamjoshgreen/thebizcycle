@@ -104,7 +104,7 @@ export default function ChartPage() {
 
       {/* Tool / Overlay bar */}
       <div
-        className="flex items-center gap-2 px-4 py-2 flex-shrink-0 flex-wrap"
+        className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-4 py-2 flex-shrink-0 flex-wrap"
         style={{ borderBottom: "1px solid hsl(230 10% 12%)" }}
       >
         {/* Overlays */}

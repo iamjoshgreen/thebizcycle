@@ -87,7 +87,7 @@ export default function DrawingToolbar({
 }: DrawingToolbarProps) {
   return (
     <div
-      className="absolute left-3 top-1/2 -translate-y-1/2 z-20 flex flex-col items-center gap-1 p-1.5 rounded-lg"
+      className="absolute left-1.5 sm:left-3 top-1/2 -translate-y-1/2 z-20 flex flex-col items-center gap-1 p-1 sm:p-1.5 rounded-lg"
       style={{
         background: "hsl(230 14% 9% / 0.92)",
         border: "1px solid hsl(230 10% 16%)",

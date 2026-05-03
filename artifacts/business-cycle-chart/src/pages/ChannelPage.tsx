@@ -723,7 +723,7 @@ export default function ChannelPage() {
 
       {/* Controls bar */}
       <div
-        className="flex items-center gap-4 px-5 py-2 border-b shrink-0"
+        className="flex items-center gap-2 sm:gap-4 px-2 sm:px-5 py-2 border-b shrink-0 flex-wrap"
         style={{
           background: "hsl(230 14% 9%)",
           borderColor: "hsl(230 10% 14%)",

@@ -80,13 +80,13 @@ export function SaveIndicator({ status }: { status: SaveStatus }) {
   );
 }
 
-const TABS: { path: string; label: string }[] = [
-  { path: "/", label: "Business Cycle Chart" },
-  { path: "/fractal", label: "Fractal Overlay" },
-  { path: "/channel", label: "Channel" },
-  { path: "/housing", label: "Housing" },
-  { path: "/recession", label: "Recession" },
-  { path: "/cyclical", label: "Cyclical GDP" },
+const TABS: { path: string; label: string; short: string }[] = [
+  { path: "/", label: "Business Cycle Chart", short: "Cycle" },
+  { path: "/fractal", label: "Fractal Overlay", short: "Fractal" },
+  { path: "/channel", label: "Channel", short: "Channel" },
+  { path: "/housing", label: "Housing", short: "Housing" },
+  { path: "/recession", label: "Recession", short: "Recess." },
+  { path: "/cyclical", label: "Cyclical GDP", short: "GDP" },
 ];
 
 function formatTimestamp(unix: number): string {
@@ -103,9 +103,12 @@ function formatTimestamp(unix: number): string {
 function Tabs() {
   const [location] = useLocation();
   return (
-    <div className="flex items-center gap-1">
+    <div
+      className="flex items-center gap-1 overflow-x-auto flex-1 min-w-0 -mx-1 px-1 scrollbar-none"
+      style={{ scrollbarWidth: "none" }}
+    >
       <div
-        className="w-2 h-2 rounded-full mr-2.5"
+        className="w-2 h-2 rounded-full mr-1.5 sm:mr-2.5 shrink-0"
         style={{ background: "hsl(224 100% 58%)" }}
       />
       {TABS.map((tab) => {
@@ -114,7 +117,7 @@ function Tabs() {
           <Link
             key={tab.path}
             href={tab.path}
-            className="px-2.5 py-1 rounded text-sm font-semibold tracking-tight transition-colors"
+            className="px-2 sm:px-2.5 py-1 rounded text-sm font-semibold tracking-tight transition-colors shrink-0"
             style={{
               color: active ? "hsl(220 14% 95%)" : "hsl(220 10% 45%)",
               background: active ? "hsl(230 12% 14%)" : "transparent",
@@ -123,7 +126,8 @@ function Tabs() {
             }}
             data-testid={`tab-${tab.path === "/" ? "home" : tab.path.slice(1)}`}
           >
-            {tab.label}
+            <span className="hidden sm:inline">{tab.label}</span>
+            <span className="sm:hidden">{tab.short}</span>
           </Link>
         );
       })}
@@ -134,23 +138,25 @@ function Tabs() {
 export default function TopBar({ lastUpdated, isRefreshing, onRefresh, saveStatus = "idle" }: TopBarProps) {
   return (
     <header
-      className="flex items-center justify-between px-5 h-11 shrink-0 border-b"
+      className="flex items-center justify-between gap-2 h-11 shrink-0 border-b"
       style={{
         background: "hsl(230 14% 8%)",
         borderColor: "hsl(230 10% 14%)",
+        paddingLeft: "max(0.5rem, env(safe-area-inset-left))",
+        paddingRight: "max(0.5rem, env(safe-area-inset-right))",
       }}
       data-testid="topbar"
     >
-      {/* Left — title + tabs */}
+      {/* Left — title + tabs (scrolls on mobile) */}
       <Tabs />
 
       {/* Right — save indicator + last updated + refresh, grouped so they
           never collide with the tabs as they grow on wider routes. */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
         <SaveIndicator status={saveStatus} />
         {lastUpdated ? (
           <span
-            className="text-xs hidden sm:inline"
+            className="text-xs hidden md:inline"
             style={{
               color: "hsl(220 10% 45%)",
               fontFamily: "'JetBrains Mono', monospace",
@@ -162,7 +168,7 @@ export default function TopBar({ lastUpdated, isRefreshing, onRefresh, saveStatu
           </span>
         ) : (
           <span
-            className="text-xs hidden sm:inline"
+            className="text-xs hidden md:inline"
             style={{ color: "hsl(220 10% 30%)", fontFamily: "'JetBrains Mono', monospace" }}
           >
             No data cached
@@ -171,7 +177,8 @@ export default function TopBar({ lastUpdated, isRefreshing, onRefresh, saveStatu
         <button
         onClick={onRefresh}
         disabled={isRefreshing}
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+        aria-label="Refresh"
+        className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 rounded text-xs font-medium transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
         style={{
           background: isRefreshing ? "hsl(224 100% 58% / 0.15)" : "hsl(230 12% 14%)",
           color: isRefreshing ? "hsl(224 100% 72%)" : "hsl(220 14% 65%)",
@@ -198,7 +205,7 @@ export default function TopBar({ lastUpdated, isRefreshing, onRefresh, saveStatu
           size={11}
           className={isRefreshing ? "animate-spin" : ""}
         />
-        Refresh
+        <span className="hidden sm:inline">Refresh</span>
       </button>
       </div>
     </header>
