@@ -402,6 +402,64 @@ components:
             $ref: "#/components/schemas/MonthlyPoint"
       required: [current, yearAgo, tightening, data]
 
+    CompletedMonthsSupply:
+      type: object
+      description: |
+        Refinement of the standard "months supply of new homes" indicator that
+        weights for completion mix. In 2022, raw months supply gave a false
+        recession signal because <10% of inventory was completed (vs. 20-30%
+        historically). Completed Months Supply = MSACSR * (completed/total).
+      properties:
+        currentMonthsSupply:
+          type: number
+          nullable: true
+          description: Latest raw MSACSR value (months of supply).
+        currentCompletedMonthsSupply:
+          type: number
+          nullable: true
+          description: Latest MSACSR weighted by % of inventory marked completed.
+        currentPctCompleted:
+          type: number
+          nullable: true
+          description: Most recent % of new home inventory marked "completed".
+        gap:
+          type: number
+          nullable: true
+          description: currentMonthsSupply minus currentCompletedMonthsSupply.
+        asOf:
+          type: number
+          nullable: true
+          description: Unix seconds for the latest data point.
+        signal:
+          type: string
+          enum: [tight, normal, elevated, recessionary, insufficient]
+          description: Bucket for completed-months-supply current reading.
+        headline:
+          type: string
+          description: One-line plain-English read of the current state.
+        explainer:
+          type: string
+          description: Two-sentence context tying the metric to today's reading.
+        monthsSupplyHistory:
+          type: array
+          items:
+            $ref: "#/components/schemas/MonthlyPoint"
+        completedMonthsSupplyHistory:
+          type: array
+          items:
+            $ref: "#/components/schemas/MonthlyPoint"
+      required:
+        - currentMonthsSupply
+        - currentCompletedMonthsSupply
+        - currentPctCompleted
+        - gap
+        - asOf
+        - signal
+        - headline
+        - explainer
+        - monthsSupplyHistory
+        - completedMonthsSupplyHistory
+
     HousingPayload:
       type: object
       properties:
@@ -435,6 +493,8 @@ components:
           type: string
         fedContext:
           type: string
+        completedMonthsSupply:
+          $ref: "#/components/schemas/CompletedMonthsSupply"
         lastUpdated:
           type: number
       required:

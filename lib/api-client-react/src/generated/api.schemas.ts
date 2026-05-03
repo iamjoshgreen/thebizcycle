@@ -125,6 +125,48 @@ export interface FedStatus {
   data: MonthlyPoint[];
 }
 
+/**
+ * Bucket for completed-months-supply current reading.
+ */
+export type CompletedMonthsSupplySignal =
+  (typeof CompletedMonthsSupplySignal)[keyof typeof CompletedMonthsSupplySignal];
+
+export const CompletedMonthsSupplySignal = {
+  tight: "tight",
+  normal: "normal",
+  elevated: "elevated",
+  recessionary: "recessionary",
+  insufficient: "insufficient",
+} as const;
+
+/**
+ * Refinement of the standard "months supply of new homes" indicator that
+weights for completion mix. In 2022, raw months supply gave a false
+recession signal because <10% of inventory was completed (vs. 20-30%
+historically). Completed Months Supply = MSACSR * (completed/total).
+
+ */
+export interface CompletedMonthsSupply {
+  /** Latest raw MSACSR value (months of supply). */
+  currentMonthsSupply: number | null;
+  /** Latest MSACSR weighted by % of inventory marked completed. */
+  currentCompletedMonthsSupply: number | null;
+  /** Most recent % of new home inventory marked "completed". */
+  currentPctCompleted: number | null;
+  /** currentMonthsSupply minus currentCompletedMonthsSupply. */
+  gap: number | null;
+  /** Unix seconds for the latest data point. */
+  asOf: number | null;
+  /** Bucket for completed-months-supply current reading. */
+  signal: CompletedMonthsSupplySignal;
+  /** One-line plain-English read of the current state. */
+  headline: string;
+  /** Two-sentence context tying the metric to today's reading. */
+  explainer: string;
+  monthsSupplyHistory: MonthlyPoint[];
+  completedMonthsSupplyHistory: MonthlyPoint[];
+}
+
 export interface HousingPayload {
   fed: FedStatus;
   dominoes: DominoStatus[];
@@ -138,6 +180,7 @@ export interface HousingPayload {
   headlineSubtitle: string;
   summary: string;
   fedContext: string;
+  completedMonthsSupply?: CompletedMonthsSupply;
   lastUpdated: number;
 }
 

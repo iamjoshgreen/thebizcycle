@@ -50,6 +50,26 @@ export interface FedStatus {
   data: MonthlyPoint[]; // last 36 months
 }
 
+export type CmsSignal = "tight" | "normal" | "elevated" | "recessionary" | "insufficient";
+
+// "Completed Months Supply" — the EPB Research refinement of months supply
+// that filters for inventory actually marked as "completed". Raw months supply
+// gave a false recession signal in 2022 because <10% of inventory was finished
+// (vs. 20-30% historically), so a high MSACSR didn't mean homes were piling up
+// on the market — they were piling up under construction.
+export interface CompletedMonthsSupply {
+  currentMonthsSupply: number | null;
+  currentCompletedMonthsSupply: number | null;
+  currentPctCompleted: number | null; // 0..100
+  gap: number | null; // raw - completed
+  asOf: number | null; // unix seconds
+  signal: CmsSignal;
+  headline: string;
+  explainer: string;
+  monthsSupplyHistory: MonthlyPoint[]; // last ~10 years
+  completedMonthsSupplyHistory: MonthlyPoint[]; // aligned, last ~10 years
+}
+
 export interface HousingPayload {
   fed: FedStatus;
   dominoes: DominoStatus[]; // in canonical order
@@ -64,6 +84,7 @@ export interface HousingPayload {
   headlineSubtitle: string; // one-line explainer under the label
   summary: string; // sentence replacing "X fallen · Y rolling · Z steady"
   fedContext: string; // "Fed Funds 3.64% — down from 5.33% peak…"
+  completedMonthsSupply: CompletedMonthsSupply;
   lastUpdated: number;
 }
 
@@ -380,11 +401,177 @@ function makeFedContext(fed: FedStatus, fedAll: MonthlyPoint[]): string {
   return `Fed Funds ${cur}% — roughly flat, neutral pressure on housing.`;
 }
 
+// ─── Completed Months Supply (EPB Research refinement) ──────────────────────
+//
+// Raw months supply (MSACSR) was a reliable recession lead until 2022, when it
+// hit ~10.6 (recession territory) but no recession came — because <10% of new
+// home inventory was actually completed. Builders were sitting on a backlog of
+// homes still under construction, not finished homes piling up on lots. Once
+// you weight by % completed, the false signal disappears and the metric still
+// works.
+//
+// Completed Months Supply = MSACSR * (NHFSEPCS / NHFSEPTS)
+//   MSACSR   — Monthly Supply of New Houses (months)
+//   NHFSEPCS — New Houses for Sale, Completed
+//   NHFSEPTS — New Houses for Sale, Total
+//
+// We tolerate any of these series being unavailable and degrade gracefully.
+
+async function fetchFredSafe(series: string): Promise<MonthlyPoint[]> {
+  try {
+    return await fetchFredAll(series);
+  } catch (err) {
+    logger.warn({ err, series }, "Failed to fetch FRED series; continuing without it");
+    return [];
+  }
+}
+
+function computeCompletedMonthsSupply(
+  msacsr: MonthlyPoint[],
+  completed: MonthlyPoint[],
+  total: MonthlyPoint[]
+): CompletedMonthsSupply {
+  // Index inventory series by timestamp for alignment with MSACSR.
+  const completedByTs = new Map(completed.map((p) => [p.time, p.value]));
+  const totalByTs = new Map(total.map((p) => [p.time, p.value]));
+
+  const msHistory: MonthlyPoint[] = [];
+  const cmsHistory: MonthlyPoint[] = [];
+  for (const ms of msacsr) {
+    const c = completedByTs.get(ms.time);
+    const t = totalByTs.get(ms.time);
+    msHistory.push(ms);
+    if (c != null && t != null && t > 0) {
+      const pct = c / t;
+      cmsHistory.push({ time: ms.time, value: ms.value * pct });
+    }
+  }
+
+  // Trim history to last ~10 years for the chart payload.
+  const trim = <T>(arr: T[], n: number) => arr.slice(-n);
+  const msHist10y = trim(msHistory, 12 * 10);
+  const cmsHist10y = trim(cmsHistory, 12 * 10);
+
+  if (msHistory.length === 0 || cmsHistory.length === 0) {
+    return {
+      currentMonthsSupply: null,
+      currentCompletedMonthsSupply: null,
+      currentPctCompleted: null,
+      gap: null,
+      asOf: null,
+      signal: "insufficient",
+      headline: "Completed Months Supply data unavailable.",
+      explainer:
+        "We couldn't pull the new-home inventory composition from FRED, so we can't separate the raw months supply signal from the completion mix right now.",
+      monthsSupplyHistory: msHist10y,
+      completedMonthsSupplyHistory: cmsHist10y,
+    };
+  }
+
+  // Anchor the "current reading" to the latest date that exists in ALL three
+  // source series. MSACSR can release a month before the stage-of-construction
+  // breakdown, so taking the raw MSACSR's last point would misalign the gap
+  // and the explainer ("raw MS today vs CMS one month ago"). Using the latest
+  // common date keeps every current-value field on the same as-of month.
+  const msTsSet = new Set(msacsr.map((p) => p.time));
+  const sharedTs = cmsHistory
+    .map((p) => p.time)
+    .filter((t) => msTsSet.has(t));
+
+  if (sharedTs.length === 0) {
+    return {
+      currentMonthsSupply: null,
+      currentCompletedMonthsSupply: null,
+      currentPctCompleted: null,
+      gap: null,
+      asOf: null,
+      signal: "insufficient",
+      headline: "Completed Months Supply data unavailable.",
+      explainer:
+        "Months-supply and inventory-composition series have no overlapping dates, so we can't anchor today's reading to a common month.",
+      monthsSupplyHistory: msHist10y,
+      completedMonthsSupplyHistory: cmsHist10y,
+    };
+  }
+
+  const anchorTs = sharedTs[sharedTs.length - 1];
+  const msByTs = new Map(msacsr.map((p) => [p.time, p.value]));
+  const cmsByTs = new Map(cmsHistory.map((p) => [p.time, p.value]));
+
+  const currentMs = msByTs.get(anchorTs)!;
+  const currentCms = cmsByTs.get(anchorTs)!;
+
+  // Trim both history arrays to end at the shared anchor month, so the dual-
+  // line chart's gray (raw) and blue (completed) series cover the same window
+  // and any visual subtraction at a given x-coordinate is genuine.
+  const msHistAligned = msHist10y.filter((p) => p.time <= anchorTs);
+  const cmsHistAligned = cmsHist10y.filter((p) => p.time <= anchorTs);
+  const lastCompleted = completedByTs.get(anchorTs);
+  const lastTotal = totalByTs.get(anchorTs);
+  const pctCompleted =
+    lastCompleted != null && lastTotal != null && lastTotal > 0
+      ? (lastCompleted / lastTotal) * 100
+      : null;
+  const gap = currentMs - currentCms;
+
+  // Bucket the *completed* months supply (CMS), since that's the corrected signal.
+  // Bands chosen to mirror the raw MSACSR bands (>7 warning, >8 recessionary)
+  // but applied to CMS, which never overshot historically the way raw MSACSR did.
+  let signal: CmsSignal;
+  if (currentCms >= 8) signal = "recessionary";
+  else if (currentCms >= 7) signal = "elevated";
+  else if (currentCms >= 4) signal = "normal";
+  else signal = "tight";
+
+  const cmsTxt = currentCms.toFixed(1);
+  const msTxt = currentMs.toFixed(1);
+  const pctTxt = pctCompleted != null ? `${pctCompleted.toFixed(0)}%` : "—";
+
+  let headline: string;
+  switch (signal) {
+    case "recessionary":
+      headline = `Completed Months Supply at ${cmsTxt} — recession-territory reading.`;
+      break;
+    case "elevated":
+      headline = `Completed Months Supply at ${cmsTxt} — elevated, the corrected signal is firing.`;
+      break;
+    case "normal":
+      headline = `Completed Months Supply at ${cmsTxt} — within the historical normal range.`;
+      break;
+    case "tight":
+      headline = `Completed Months Supply at ${cmsTxt} — supply of finished homes is tight.`;
+      break;
+    default:
+      headline = "Completed Months Supply data unavailable.";
+  }
+
+  const gapBig = Math.abs(gap) >= 2;
+  const explainer = gapBig
+    ? `Raw months supply reads ${msTxt} but only ${pctTxt} of new-home inventory is actually completed, so the corrected metric sits at ${cmsTxt}. The gap means a lot of "inventory" is still under construction — the same composition effect that produced the false 2022 recession signal.`
+    : `Raw months supply reads ${msTxt} and the completion-mix-adjusted version reads ${cmsTxt}, with ${pctTxt} of inventory finished. The two metrics are tracking close together, so today's signal isn't being distorted by an unusual construction backlog.`;
+
+  return {
+    currentMonthsSupply: currentMs,
+    currentCompletedMonthsSupply: currentCms,
+    currentPctCompleted: pctCompleted,
+    gap,
+    asOf: anchorTs,
+    signal,
+    headline,
+    explainer,
+    monthsSupplyHistory: msHistAligned,
+    completedMonthsSupplyHistory: cmsHistAligned,
+  };
+}
+
 export async function fetchHousingPayload(): Promise<HousingPayload> {
   logger.info("Fetching housing FRED series...");
 
-  const [fedfundsAll, ...seriesData] = await Promise.all([
+  const [fedfundsAll, msacsrAll, completedAll, totalAll, ...seriesData] = await Promise.all([
     fetchFredAll("FEDFUNDS"),
+    fetchFredSafe("MSACSR"),
+    fetchFredSafe("NHFSEPCS"),
+    fetchFredSafe("NHFSEPTS"),
     ...SERIES.map((s) => fetchFredAll(s.series)),
   ]);
 
@@ -417,6 +604,12 @@ export async function fetchHousingPayload(): Promise<HousingPayload> {
   const summary = makeSummary(dominoes, sequenceValid);
   const fedContext = makeFedContext(fed, fedfundsAll);
 
+  const completedMonthsSupply = computeCompletedMonthsSupply(
+    msacsrAll,
+    completedAll,
+    totalAll,
+  );
+
   return {
     fed,
     dominoes,
@@ -430,6 +623,7 @@ export async function fetchHousingPayload(): Promise<HousingPayload> {
     headlineSubtitle: headline.subtitle,
     summary,
     fedContext,
+    completedMonthsSupply,
     lastUpdated: Math.floor(Date.now() / 1000),
   };
 }

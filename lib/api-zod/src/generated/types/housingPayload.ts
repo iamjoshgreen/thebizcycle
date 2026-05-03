@@ -5,6 +5,7 @@
  * Business Cycle Chart API
  * OpenAPI spec version: 0.1.0
  */
+import type { CompletedMonthsSupply } from "./completedMonthsSupply";
 import type { DominoStatus } from "./dominoStatus";
 import type { FedStatus } from "./fedStatus";
 
@@ -21,5 +22,6 @@ export interface HousingPayload {
   headlineSubtitle: string;
   summary: string;
   fedContext: string;
+  completedMonthsSupply?: CompletedMonthsSupply;
   lastUpdated: number;
 }

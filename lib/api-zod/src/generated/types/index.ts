@@ -7,6 +7,8 @@
  */
 
 export * from "./chartPayload";
+export * from "./completedMonthsSupply";
+export * from "./completedMonthsSupplySignal";
 export * from "./cyclicalComponent";
 export * from "./cyclicalComponentId";
 export * from "./cyclicalContractionStats";

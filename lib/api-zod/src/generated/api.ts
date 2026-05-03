@@ -235,6 +235,54 @@ export const GetHousingResponse = zod.object({
   headlineSubtitle: zod.string(),
   summary: zod.string(),
   fedContext: zod.string(),
+  completedMonthsSupply: zod
+    .object({
+      currentMonthsSupply: zod
+        .number()
+        .nullable()
+        .describe("Latest raw MSACSR value (months of supply)."),
+      currentCompletedMonthsSupply: zod
+        .number()
+        .nullable()
+        .describe("Latest MSACSR weighted by % of inventory marked completed."),
+      currentPctCompleted: zod
+        .number()
+        .nullable()
+        .describe('Most recent % of new home inventory marked \"completed\".'),
+      gap: zod
+        .number()
+        .nullable()
+        .describe("currentMonthsSupply minus currentCompletedMonthsSupply."),
+      asOf: zod
+        .number()
+        .nullable()
+        .describe("Unix seconds for the latest data point."),
+      signal: zod
+        .enum(["tight", "normal", "elevated", "recessionary", "insufficient"])
+        .describe("Bucket for completed-months-supply current reading."),
+      headline: zod
+        .string()
+        .describe("One-line plain-English read of the current state."),
+      explainer: zod
+        .string()
+        .describe("Two-sentence context tying the metric to today's reading."),
+      monthsSupplyHistory: zod.array(
+        zod.object({
+          time: zod.number(),
+          value: zod.number(),
+        }),
+      ),
+      completedMonthsSupplyHistory: zod.array(
+        zod.object({
+          time: zod.number(),
+          value: zod.number(),
+        }),
+      ),
+    })
+    .optional()
+    .describe(
+      'Refinement of the standard \"months supply of new homes\" indicator that\nweights for completion mix. In 2022, raw months supply gave a false\nrecession signal because <10% of inventory was completed (vs. 20-30%\nhistorically). Completed Months Supply = MSACSR \* (completed\/total).\n',
+    ),
   lastUpdated: zod.number(),
 });
 
@@ -293,6 +341,54 @@ export const RefreshHousingResponse = zod.object({
   headlineSubtitle: zod.string(),
   summary: zod.string(),
   fedContext: zod.string(),
+  completedMonthsSupply: zod
+    .object({
+      currentMonthsSupply: zod
+        .number()
+        .nullable()
+        .describe("Latest raw MSACSR value (months of supply)."),
+      currentCompletedMonthsSupply: zod
+        .number()
+        .nullable()
+        .describe("Latest MSACSR weighted by % of inventory marked completed."),
+      currentPctCompleted: zod
+        .number()
+        .nullable()
+        .describe('Most recent % of new home inventory marked \"completed\".'),
+      gap: zod
+        .number()
+        .nullable()
+        .describe("currentMonthsSupply minus currentCompletedMonthsSupply."),
+      asOf: zod
+        .number()
+        .nullable()
+        .describe("Unix seconds for the latest data point."),
+      signal: zod
+        .enum(["tight", "normal", "elevated", "recessionary", "insufficient"])
+        .describe("Bucket for completed-months-supply current reading."),
+      headline: zod
+        .string()
+        .describe("One-line plain-English read of the current state."),
+      explainer: zod
+        .string()
+        .describe("Two-sentence context tying the metric to today's reading."),
+      monthsSupplyHistory: zod.array(
+        zod.object({
+          time: zod.number(),
+          value: zod.number(),
+        }),
+      ),
+      completedMonthsSupplyHistory: zod.array(
+        zod.object({
+          time: zod.number(),
+          value: zod.number(),
+        }),
+      ),
+    })
+    .optional()
+    .describe(
+      'Refinement of the standard \"months supply of new homes\" indicator that\nweights for completion mix. In 2022, raw months supply gave a false\nrecession signal because <10% of inventory was completed (vs. 20-30%\nhistorically). Completed Months Supply = MSACSR \* (completed\/total).\n',
+    ),
   lastUpdated: zod.number(),
 });
 

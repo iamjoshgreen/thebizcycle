@@ -1,6 +1,10 @@
 import { Fragment, useCallback } from "react";
 import { useGetHousing, useRefreshHousing } from "@workspace/api-client-react";
-import type { DominoStatus, MonthlyPoint } from "@workspace/api-client-react";
+import type {
+  CompletedMonthsSupply,
+  DominoStatus,
+  MonthlyPoint,
+} from "@workspace/api-client-react";
 import TopBar from "@/components/TopBar";
 import { useToast } from "@/hooks/use-toast";
 
@@ -134,6 +138,469 @@ function Sparkline({ data, peakDate, state, width = 320, height = 80 }: Sparklin
       {/* current dot */}
       <circle cx={x(lastPt.time)} cy={y(lastPt.value)} r={2.5} fill={stroke} />
     </svg>
+  );
+}
+
+// ─── Completed Months Supply chart ───────────────────────────────────────────
+
+interface CmsChartProps {
+  monthsSupply: MonthlyPoint[];
+  completed: MonthlyPoint[];
+  width?: number;
+  height?: number;
+}
+
+function CmsChart({ monthsSupply, completed, width = 1200, height = 240 }: CmsChartProps) {
+  if (monthsSupply.length < 2 || completed.length < 2) {
+    return (
+      <div
+        style={{
+          height,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "rgba(180,180,200,0.4)",
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: 12,
+        }}
+      >
+        no data
+      </div>
+    );
+  }
+
+  const padL = 44;
+  const padR = 14;
+  const padT = 12;
+  const padB = 26;
+
+  const allTimes = [...monthsSupply, ...completed].map((p) => p.time);
+  const xMin = Math.min(...allTimes);
+  const xMax = Math.max(...allTimes);
+  const xRange = xMax - xMin || 1;
+
+  const allVals = [...monthsSupply, ...completed].map((p) => p.value);
+  const yDataMax = Math.max(...allVals);
+  const yMin = 0;
+  const yMax = Math.max(12, Math.ceil(yDataMax + 1));
+  const yRange = yMax - yMin || 1;
+
+  const x = (t: number) => padL + ((t - xMin) / xRange) * (width - padL - padR);
+  const y = (v: number) => padT + ((yMax - v) / yRange) * (height - padT - padB);
+
+  const path = (data: MonthlyPoint[]) =>
+    data
+      .map((p, i) => `${i === 0 ? "M" : "L"} ${x(p.time).toFixed(2)} ${y(p.value).toFixed(2)}`)
+      .join(" ");
+
+  // Threshold lines (the historical recession bands for raw months supply).
+  const thresholds = [
+    { v: 7, label: "7 · elevated", color: "rgba(245,158,11,0.45)" },
+    { v: 8, label: "8 · recession-territory", color: "rgba(239,68,68,0.5)" },
+  ];
+
+  // Y ticks at integer intervals.
+  const yTicks: number[] = [];
+  for (let v = 0; v <= yMax; v += 2) yTicks.push(v);
+
+  // X ticks at every 2 years.
+  const startYear = new Date(xMin * 1000).getUTCFullYear();
+  const endYear = new Date(xMax * 1000).getUTCFullYear();
+  const xTicks: { x: number; label: string }[] = [];
+  for (let yr = Math.ceil(startYear / 2) * 2; yr <= endYear; yr += 2) {
+    const ts = Math.floor(Date.UTC(yr, 0, 1) / 1000);
+    if (ts < xMin || ts > xMax) continue;
+    xTicks.push({ x: x(ts), label: String(yr) });
+  }
+
+  const lastMs = monthsSupply[monthsSupply.length - 1];
+  const lastCms = completed[completed.length - 1];
+
+  return (
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="none"
+      style={{ display: "block", width: "100%", height }}
+    >
+      {/* Threshold band shading (above 7 = warning, above 8 = recession) */}
+      <rect
+        x={padL}
+        y={y(yMax)}
+        width={width - padL - padR}
+        height={Math.max(0, y(8) - y(yMax))}
+        fill="rgba(239,68,68,0.06)"
+      />
+      <rect
+        x={padL}
+        y={y(8)}
+        width={width - padL - padR}
+        height={Math.max(0, y(7) - y(8))}
+        fill="rgba(245,158,11,0.06)"
+      />
+
+      {/* Y grid + labels */}
+      {yTicks.map((v) => (
+        <g key={v}>
+          <line
+            x1={padL}
+            x2={width - padR}
+            y1={y(v)}
+            y2={y(v)}
+            stroke="rgba(255,255,255,0.04)"
+            strokeWidth={1}
+          />
+          <text
+            x={padL - 6}
+            y={y(v) + 3}
+            textAnchor="end"
+            fill="rgba(180,180,200,0.5)"
+            fontFamily="'JetBrains Mono', monospace"
+            fontSize={10}
+          >
+            {v}
+          </text>
+        </g>
+      ))}
+
+      {/* X tick labels */}
+      {xTicks.map((t) => (
+        <g key={t.label}>
+          <line
+            x1={t.x}
+            x2={t.x}
+            y1={padT}
+            y2={height - padB}
+            stroke="rgba(255,255,255,0.025)"
+            strokeWidth={1}
+          />
+          <text
+            x={t.x}
+            y={height - padB + 14}
+            textAnchor="middle"
+            fill="rgba(180,180,200,0.5)"
+            fontFamily="'JetBrains Mono', monospace"
+            fontSize={10}
+          >
+            {t.label}
+          </text>
+        </g>
+      ))}
+
+      {/* Threshold lines */}
+      {thresholds.map((t) => (
+        <line
+          key={t.v}
+          x1={padL}
+          x2={width - padR}
+          y1={y(t.v)}
+          y2={y(t.v)}
+          stroke={t.color}
+          strokeWidth={1}
+          strokeDasharray="3 3"
+        />
+      ))}
+
+      {/* Raw months supply — muted line */}
+      <path
+        d={path(monthsSupply)}
+        fill="none"
+        stroke="rgba(180,180,200,0.55)"
+        strokeWidth={1.3}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+      {/* Completed months supply — accent line */}
+      <path
+        d={path(completed)}
+        fill="none"
+        stroke="rgba(96,165,250,0.95)"
+        strokeWidth={1.6}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+
+      {/* Current dots */}
+      <circle cx={x(lastMs.time)} cy={y(lastMs.value)} r={3} fill="rgba(220,225,235,0.9)" />
+      <circle cx={x(lastCms.time)} cy={y(lastCms.value)} r={3.5} fill="rgba(96,165,250,1)" />
+    </svg>
+  );
+}
+
+// Plain-English signal pill colors for the CMS card.
+const CMS_SIGNAL_THEME: Record<
+  string,
+  { fg: string; bg: string; border: string; dot: string; label: string }
+> = {
+  tight: {
+    fg: "rgba(180,210,200,0.95)",
+    bg: "hsl(160 30% 12% / 0.5)",
+    border: "rgba(80,180,140,0.4)",
+    dot: "#10B981",
+    label: "TIGHT",
+  },
+  normal: {
+    fg: "rgba(180,210,200,0.95)",
+    bg: "hsl(160 30% 12% / 0.45)",
+    border: "rgba(80,180,140,0.35)",
+    dot: "#10B981",
+    label: "NORMAL",
+  },
+  elevated: {
+    fg: "rgba(255,210,140,0.95)",
+    bg: "hsl(35 60% 12% / 0.55)",
+    border: "rgba(245,160,40,0.5)",
+    dot: "#F59E0B",
+    label: "ELEVATED",
+  },
+  recessionary: {
+    fg: "rgba(255,170,170,0.95)",
+    bg: "hsl(0 50% 14% / 0.55)",
+    border: "rgba(239,80,80,0.55)",
+    dot: "#EF4444",
+    label: "RECESSIONARY",
+  },
+  insufficient: {
+    fg: "rgba(180,180,200,0.85)",
+    bg: "hsl(230 14% 11% / 0.5)",
+    border: "rgba(140,140,160,0.35)",
+    dot: "#94A3B8",
+    label: "—",
+  },
+};
+
+function CompletedMonthsSupplySection({ cms }: { cms: CompletedMonthsSupply }) {
+  const theme = CMS_SIGNAL_THEME[cms.signal] ?? CMS_SIGNAL_THEME.insufficient;
+
+  return (
+    <div
+      style={{
+        background: "hsl(230 14% 9% / 0.45)",
+        border: "1px solid hsl(230 10% 16%)",
+        borderRadius: 10,
+        padding: "18px 20px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 16,
+      }}
+      data-testid="completed-months-supply"
+    >
+      {/* Header row */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 10,
+        }}
+      >
+        <div>
+          <div
+            style={{
+              color: "rgba(180,180,200,0.5)",
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 11,
+              letterSpacing: "0.12em",
+            }}
+          >
+            ADVANCED INDICATOR · COMPLETED MONTHS SUPPLY
+          </div>
+          <div
+            style={{
+              color: "rgba(225,230,240,0.95)",
+              fontFamily: "'Inter', sans-serif",
+              fontSize: 16,
+              fontWeight: 600,
+              letterSpacing: "-0.01em",
+              marginTop: 4,
+            }}
+          >
+            The 2022 false-signal fix for months supply
+          </div>
+        </div>
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 6,
+            padding: "4px 10px",
+            background: theme.bg,
+            border: `1px solid ${theme.border}`,
+            color: theme.fg,
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: "0.08em",
+            borderRadius: 4,
+          }}
+        >
+          <span
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: "50%",
+              background: theme.dot,
+              display: "inline-block",
+            }}
+          />
+          {theme.label}
+        </span>
+      </div>
+
+      {/* Headline + explainer */}
+      <div>
+        <div
+          style={{
+            color: "rgba(235,240,250,0.95)",
+            fontFamily: "'Inter', sans-serif",
+            fontSize: 17,
+            fontWeight: 500,
+            lineHeight: 1.45,
+          }}
+          data-testid="cms-headline"
+        >
+          {cms.headline}
+        </div>
+        <div
+          style={{
+            color: "rgba(190,195,210,0.7)",
+            fontFamily: "'Inter', sans-serif",
+            fontSize: 13,
+            lineHeight: 1.55,
+            marginTop: 8,
+          }}
+          data-testid="cms-explainer"
+        >
+          {cms.explainer}
+        </div>
+      </div>
+
+      {/* Stat row */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+          gap: 12,
+        }}
+      >
+        <CmsStat
+          label="Raw Months Supply"
+          value={cms.currentMonthsSupply != null ? cms.currentMonthsSupply.toFixed(1) : "—"}
+          accent="rgba(220,225,235,0.9)"
+        />
+        <CmsStat
+          label="Completed Months Supply"
+          value={
+            cms.currentCompletedMonthsSupply != null
+              ? cms.currentCompletedMonthsSupply.toFixed(1)
+              : "—"
+          }
+          accent="rgba(96,165,250,1)"
+        />
+        <CmsStat
+          label="% Inventory Completed"
+          value={
+            cms.currentPctCompleted != null ? `${cms.currentPctCompleted.toFixed(0)}%` : "—"
+          }
+          accent="rgba(220,225,235,0.9)"
+        />
+        <CmsStat
+          label="Gap (raw − completed)"
+          value={cms.gap != null ? cms.gap.toFixed(1) : "—"}
+          accent={cms.gap != null && cms.gap >= 2 ? "rgba(245,158,11,0.95)" : "rgba(220,225,235,0.9)"}
+        />
+      </div>
+
+      {/* Chart + legend */}
+      <div>
+        <div
+          style={{
+            display: "flex",
+            gap: 16,
+            color: "rgba(180,180,200,0.55)",
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 11,
+            marginBottom: 6,
+            flexWrap: "wrap",
+          }}
+        >
+          <LegendDot color="rgba(180,180,200,0.55)" label="Raw months supply (MSACSR)" />
+          <LegendDot color="rgba(96,165,250,0.95)" label="Completed months supply" />
+          <LegendDot color="rgba(245,158,11,0.6)" label="7 · elevated" />
+          <LegendDot color="rgba(239,68,68,0.6)" label="8 · recession-territory" />
+        </div>
+        <CmsChart
+          monthsSupply={cms.monthsSupplyHistory}
+          completed={cms.completedMonthsSupplyHistory}
+        />
+      </div>
+
+      <div
+        style={{
+          color: "rgba(180,180,200,0.45)",
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: 11,
+          lineHeight: 1.5,
+        }}
+      >
+        FRED: MSACSR · NHFSEPCS · NHFSEPTS · methodology refinement per EPB Research
+      </div>
+    </div>
+  );
+}
+
+function CmsStat({ label, value, accent }: { label: string; value: string; accent: string }) {
+  return (
+    <div
+      style={{
+        background: "hsl(230 14% 7% / 0.55)",
+        border: "1px solid hsl(230 10% 14%)",
+        borderRadius: 8,
+        padding: "12px 14px",
+      }}
+    >
+      <div
+        style={{
+          color: "rgba(180,180,200,0.55)",
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: 10,
+          letterSpacing: "0.08em",
+          textTransform: "uppercase",
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          color: accent,
+          fontFamily: "'Inter', sans-serif",
+          fontSize: 26,
+          fontWeight: 700,
+          letterSpacing: "-0.02em",
+          lineHeight: 1.1,
+          marginTop: 4,
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+      <span
+        style={{
+          display: "inline-block",
+          width: 10,
+          height: 10,
+          borderRadius: 2,
+          background: color,
+        }}
+      />
+      {label}
+    </span>
   );
 }
 
@@ -908,6 +1375,14 @@ export default function HousingPage() {
                 </Fragment>
               ))}
             </div>
+
+            {/* Completed Months Supply — methodological refinement of the
+                classic months-supply leading indicator. Sits below the dominoes
+                because it's a deeper-dive read for users who want the corrected
+                signal that explains the 2022 false alarm. */}
+            {payload.completedMonthsSupply && (
+              <CompletedMonthsSupplySection cms={payload.completedMonthsSupply} />
+            )}
 
             {/* Footer note — single line */}
             <div
