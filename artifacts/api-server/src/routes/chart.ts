@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { fetchAndCompute, type ChartPayload } from "../lib/dataFetcher.js";
-import { readCache, writeCache } from "../lib/cache.js";
+import { readCache, writeCache, tryWriteCache } from "../lib/cache.js";
 
 const router = Router();
 const CACHE_KEY = "chart_payload";
@@ -13,7 +13,7 @@ router.get("/chart", async (req, res) => {
       return;
     }
     const payload = await fetchAndCompute();
-    await writeCache(CACHE_KEY, payload);
+    await tryWriteCache(CACHE_KEY, payload);
     res.json(payload);
   } catch (err) {
     req.log.error({ err }, "Error fetching chart data");

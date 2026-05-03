@@ -29,6 +29,18 @@ export async function writeCache<T>(key: string, value: T): Promise<void> {
     });
 }
 
+/**
+ * Best-effort cache write: never throws. Use this on read paths so that a
+ * transient DB write failure does not break a successful fetch.
+ */
+export async function tryWriteCache<T>(key: string, value: T): Promise<void> {
+  try {
+    await writeCache(key, value);
+  } catch (err) {
+    console.warn(`[cache] writeCache failed for key=${key}`, err);
+  }
+}
+
 export async function runCacheBustIfNeeded(): Promise<void> {
   const current = await readCache<string>(CACHE_BUST_KEY);
   if (current === CACHE_BUST_VERSION) return;

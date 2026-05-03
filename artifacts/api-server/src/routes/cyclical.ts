@@ -3,7 +3,7 @@ import {
   fetchCyclicalPayload,
   type CyclicalPayload,
 } from "../lib/cyclicalFetcher.js";
-import { readCache, writeCache } from "../lib/cache.js";
+import { readCache, writeCache, tryWriteCache } from "../lib/cache.js";
 
 const router = Router();
 const CACHE_KEY = "cyclical_payload";
@@ -16,7 +16,7 @@ router.get("/cyclical", async (req, res) => {
       return;
     }
     const payload = await fetchCyclicalPayload();
-    await writeCache(CACHE_KEY, payload);
+    await tryWriteCache(CACHE_KEY, payload);
     res.json(payload);
   } catch (err) {
     req.log.error({ err }, "Error fetching cyclical data");

@@ -30,7 +30,18 @@ router.get("/drawings", async (req, res) => {
 
 router.post("/drawings", async (req, res) => {
   try {
-    const { data } = req.body as { data: unknown };
+    const body = req.body as { data?: unknown };
+    if (
+      !body ||
+      typeof body !== "object" ||
+      body.data === undefined ||
+      body.data === null ||
+      typeof body.data !== "object"
+    ) {
+      res.status(400).json({ error: "Body must be { data: object | array }" });
+      return;
+    }
+    const { data } = body;
     const now = new Date();
 
     await db
