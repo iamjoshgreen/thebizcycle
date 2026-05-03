@@ -228,6 +228,7 @@ function OrderBadge({ status }: { status: DominoStatus["orderStatus"] }) {
 function DominoArrow() {
   return (
     <div
+      className="rotate-90 sm:rotate-0"
       style={{
         flex: "0 0 24px",
         display: "flex",
@@ -893,8 +894,13 @@ export default function HousingPage() {
             </div>
 
             {/* Domino row — cards separated by directional arrows so the
-                expected falling order is visually obvious. */}
-            <div style={{ display: "flex", gap: 6, alignItems: "stretch" }}>
+                expected falling order is visually obvious. Stacks vertically
+                on mobile (with down-arrows) and lays out horizontally on
+                tablet/desktop. */}
+            <div
+              className="flex flex-col sm:flex-row"
+              style={{ gap: 6, alignItems: "stretch" }}
+            >
               {payload.dominoes.map((d, i) => (
                 <Fragment key={d.id}>
                   {i > 0 && <DominoArrow />}
