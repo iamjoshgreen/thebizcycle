@@ -278,6 +278,16 @@ export const GetHousingResponse = zod.object({
           value: zod.number(),
         }),
       ),
+      pctCompletedHistory: zod
+        .array(
+          zod.object({
+            time: zod.number(),
+            value: zod.number(),
+          }),
+        )
+        .describe(
+          "Monthly history of % of new-home inventory marked completed (0-100).",
+        ),
     })
     .optional()
     .describe(
@@ -384,6 +394,16 @@ export const RefreshHousingResponse = zod.object({
           value: zod.number(),
         }),
       ),
+      pctCompletedHistory: zod
+        .array(
+          zod.object({
+            time: zod.number(),
+            value: zod.number(),
+          }),
+        )
+        .describe(
+          "Monthly history of % of new-home inventory marked completed (0-100).",
+        ),
     })
     .optional()
     .describe(

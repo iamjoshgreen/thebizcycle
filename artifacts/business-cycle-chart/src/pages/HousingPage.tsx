@@ -326,6 +326,168 @@ function CmsChart({ monthsSupply, completed, width = 1200, height = 240 }: CmsCh
   );
 }
 
+// ─── % of New Home Inventory That's Completed chart ──────────────────────────
+
+interface PctCompletedChartProps {
+  data: MonthlyPoint[];
+  width?: number;
+  height?: number;
+}
+
+function PctCompletedChart({ data, width = 1200, height = 200 }: PctCompletedChartProps) {
+  if (data.length < 2) {
+    return (
+      <div
+        style={{
+          height,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "rgba(180,180,200,0.4)",
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: 12,
+        }}
+      >
+        no data
+      </div>
+    );
+  }
+
+  const padL = 44;
+  const padR = 14;
+  const padT = 12;
+  const padB = 26;
+
+  const xMin = data[0].time;
+  const xMax = data[data.length - 1].time;
+  const xRange = xMax - xMin || 1;
+
+  const vals = data.map((p) => p.value);
+  const yDataMax = Math.max(...vals);
+  const yMin = 0;
+  const yMax = Math.max(40, Math.ceil((yDataMax + 5) / 5) * 5);
+  const yRange = yMax - yMin || 1;
+
+  const x = (t: number) => padL + ((t - xMin) / xRange) * (width - padL - padR);
+  const y = (v: number) => padT + ((yMax - v) / yRange) * (height - padT - padB);
+
+  const path = data
+    .map((p, i) => `${i === 0 ? "M" : "L"} ${x(p.time).toFixed(2)} ${y(p.value).toFixed(2)}`)
+    .join(" ");
+
+  // The "historically normal" 20-30% band — the EPB article's reference range.
+  const bandTop = 30;
+  const bandBottom = 20;
+
+  const yTicks: number[] = [];
+  for (let v = 0; v <= yMax; v += 10) yTicks.push(v);
+
+  const startYear = new Date(xMin * 1000).getUTCFullYear();
+  const endYear = new Date(xMax * 1000).getUTCFullYear();
+  const xTicks: { x: number; label: string }[] = [];
+  for (let yr = Math.ceil(startYear / 2) * 2; yr <= endYear; yr += 2) {
+    const ts = Math.floor(Date.UTC(yr, 0, 1) / 1000);
+    if (ts < xMin || ts > xMax) continue;
+    xTicks.push({ x: x(ts), label: String(yr) });
+  }
+
+  const last = data[data.length - 1];
+
+  return (
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      preserveAspectRatio="none"
+      style={{ display: "block", width: "100%", height }}
+    >
+      {/* Historical "normal" band: 20-30% completed */}
+      <rect
+        x={padL}
+        y={y(bandTop)}
+        width={width - padL - padR}
+        height={Math.max(0, y(bandBottom) - y(bandTop))}
+        fill="rgba(96,165,250,0.05)"
+      />
+      <line
+        x1={padL}
+        x2={width - padR}
+        y1={y(bandTop)}
+        y2={y(bandTop)}
+        stroke="rgba(96,165,250,0.3)"
+        strokeWidth={1}
+        strokeDasharray="3 3"
+      />
+      <line
+        x1={padL}
+        x2={width - padR}
+        y1={y(bandBottom)}
+        y2={y(bandBottom)}
+        stroke="rgba(96,165,250,0.3)"
+        strokeWidth={1}
+        strokeDasharray="3 3"
+      />
+
+      {/* Y grid + labels */}
+      {yTicks.map((v) => (
+        <g key={v}>
+          <line
+            x1={padL}
+            x2={width - padR}
+            y1={y(v)}
+            y2={y(v)}
+            stroke="rgba(255,255,255,0.04)"
+            strokeWidth={1}
+          />
+          <text
+            x={padL - 6}
+            y={y(v) + 3}
+            textAnchor="end"
+            fill="rgba(180,180,200,0.5)"
+            fontFamily="'JetBrains Mono', monospace"
+            fontSize={10}
+          >
+            {v}%
+          </text>
+        </g>
+      ))}
+
+      {/* X tick labels */}
+      {xTicks.map((t) => (
+        <g key={t.label}>
+          <line
+            x1={t.x}
+            x2={t.x}
+            y1={padT}
+            y2={height - padB}
+            stroke="rgba(255,255,255,0.025)"
+            strokeWidth={1}
+          />
+          <text
+            x={t.x}
+            y={height - padB + 14}
+            textAnchor="middle"
+            fill="rgba(180,180,200,0.5)"
+            fontFamily="'JetBrains Mono', monospace"
+            fontSize={10}
+          >
+            {t.label}
+          </text>
+        </g>
+      ))}
+
+      <path
+        d={path}
+        fill="none"
+        stroke="rgba(96,165,250,0.95)"
+        strokeWidth={1.6}
+        strokeLinejoin="round"
+        strokeLinecap="round"
+      />
+
+      <circle cx={x(last.time)} cy={y(last.value)} r={3.5} fill="rgba(96,165,250,1)" />
+    </svg>
+  );
+}
+
 // Plain-English signal pill colors for the CMS card.
 const CMS_SIGNAL_THEME: Record<
   string,
@@ -533,6 +695,51 @@ function CompletedMonthsSupplySection({ cms }: { cms: CompletedMonthsSupply }) {
           monthsSupply={cms.monthsSupplyHistory}
           completed={cms.completedMonthsSupplyHistory}
         />
+      </div>
+
+      {/* Companion chart: % of new-home inventory that's actually completed.
+          This is the "why" behind the gap in the chart above — the EPB article's
+          composition story made visible. */}
+      <div>
+        <div
+          style={{
+            color: "rgba(220,225,235,0.85)",
+            fontFamily: "'Inter', sans-serif",
+            fontSize: 14,
+            fontWeight: 600,
+            marginBottom: 4,
+          }}
+        >
+          % of new-home inventory that's completed
+        </div>
+        <div
+          style={{
+            color: "rgba(180,180,200,0.6)",
+            fontFamily: "'Inter', sans-serif",
+            fontSize: 12,
+            lineHeight: 1.5,
+            marginBottom: 10,
+          }}
+        >
+          When this drops, raw months supply overstates the recession signal — fewer of the homes
+          counted as "supply" are actually move-in ready. Historically this sits in the 20–30%
+          band; the 2021 collapse to ~8% is what produced the false 2022 signal.
+        </div>
+        <div
+          style={{
+            display: "flex",
+            gap: 16,
+            color: "rgba(180,180,200,0.55)",
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 11,
+            marginBottom: 6,
+            flexWrap: "wrap",
+          }}
+        >
+          <LegendDot color="rgba(96,165,250,0.95)" label="% completed (NHFSEPCS / NHFSEPTS)" />
+          <LegendDot color="rgba(96,165,250,0.5)" label="20–30% · historical normal band" />
+        </div>
+        <PctCompletedChart data={cms.pctCompletedHistory} />
       </div>
 
       <div

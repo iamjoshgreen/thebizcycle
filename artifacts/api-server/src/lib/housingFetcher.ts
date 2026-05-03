@@ -68,6 +68,7 @@ export interface CompletedMonthsSupply {
   explainer: string;
   monthsSupplyHistory: MonthlyPoint[]; // last ~10 years
   completedMonthsSupplyHistory: MonthlyPoint[]; // aligned, last ~10 years
+  pctCompletedHistory: MonthlyPoint[]; // % completed, last ~10 years
 }
 
 export interface HousingPayload {
@@ -437,6 +438,7 @@ function computeCompletedMonthsSupply(
 
   const msHistory: MonthlyPoint[] = [];
   const cmsHistory: MonthlyPoint[] = [];
+  const pctHistory: MonthlyPoint[] = [];
   for (const ms of msacsr) {
     const c = completedByTs.get(ms.time);
     const t = totalByTs.get(ms.time);
@@ -444,6 +446,7 @@ function computeCompletedMonthsSupply(
     if (c != null && t != null && t > 0) {
       const pct = c / t;
       cmsHistory.push({ time: ms.time, value: ms.value * pct });
+      pctHistory.push({ time: ms.time, value: pct * 100 });
     }
   }
 
@@ -451,6 +454,7 @@ function computeCompletedMonthsSupply(
   const trim = <T>(arr: T[], n: number) => arr.slice(-n);
   const msHist10y = trim(msHistory, 12 * 10);
   const cmsHist10y = trim(cmsHistory, 12 * 10);
+  const pctHist10y = trim(pctHistory, 12 * 10);
 
   if (msHistory.length === 0 || cmsHistory.length === 0) {
     return {
@@ -465,6 +469,7 @@ function computeCompletedMonthsSupply(
         "We couldn't pull the new-home inventory composition from FRED, so we can't separate the raw months supply signal from the completion mix right now.",
       monthsSupplyHistory: msHist10y,
       completedMonthsSupplyHistory: cmsHist10y,
+      pctCompletedHistory: pctHist10y,
     };
   }
 
@@ -491,6 +496,7 @@ function computeCompletedMonthsSupply(
         "Months-supply and inventory-composition series have no overlapping dates, so we can't anchor today's reading to a common month.",
       monthsSupplyHistory: msHist10y,
       completedMonthsSupplyHistory: cmsHist10y,
+      pctCompletedHistory: pctHist10y,
     };
   }
 
@@ -506,6 +512,7 @@ function computeCompletedMonthsSupply(
   // and any visual subtraction at a given x-coordinate is genuine.
   const msHistAligned = msHist10y.filter((p) => p.time <= anchorTs);
   const cmsHistAligned = cmsHist10y.filter((p) => p.time <= anchorTs);
+  const pctHistAligned = pctHist10y.filter((p) => p.time <= anchorTs);
   const lastCompleted = completedByTs.get(anchorTs);
   const lastTotal = totalByTs.get(anchorTs);
   const pctCompleted =
@@ -561,6 +568,7 @@ function computeCompletedMonthsSupply(
     explainer,
     monthsSupplyHistory: msHistAligned,
     completedMonthsSupplyHistory: cmsHistAligned,
+    pctCompletedHistory: pctHistAligned,
   };
 }
 

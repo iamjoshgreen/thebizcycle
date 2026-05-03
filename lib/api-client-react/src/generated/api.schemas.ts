@@ -165,6 +165,8 @@ export interface CompletedMonthsSupply {
   explainer: string;
   monthsSupplyHistory: MonthlyPoint[];
   completedMonthsSupplyHistory: MonthlyPoint[];
+  /** Monthly history of % of new-home inventory marked completed (0-100). */
+  pctCompletedHistory: MonthlyPoint[];
 }
 
 export interface HousingPayload {

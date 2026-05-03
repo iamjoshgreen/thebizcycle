@@ -448,6 +448,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MonthlyPoint"
+        pctCompletedHistory:
+          type: array
+          description: Monthly history of % of new-home inventory marked completed (0-100).
+          items:
+            $ref: "#/components/schemas/MonthlyPoint"
       required:
         - currentMonthsSupply
         - currentCompletedMonthsSupply
@@ -459,6 +464,7 @@ components:
         - explainer
         - monthsSupplyHistory
         - completedMonthsSupplyHistory
+        - pctCompletedHistory
 
     HousingPayload:
       type: object
