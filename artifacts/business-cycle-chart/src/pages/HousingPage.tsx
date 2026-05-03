@@ -449,7 +449,7 @@ export default function HousingPage() {
               }}
               data-testid="verdict-banner"
             >
-              <div style={{ flexShrink: 0 }}>
+              <div style={{ flex: "0 1 auto", minWidth: 0 }}>
                 <div
                   style={{
                     color: "rgba(180,180,200,0.5)",
@@ -474,7 +474,7 @@ export default function HousingPage() {
                   {verdict}
                 </div>
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ flex: "1 1 260px", minWidth: 0 }}>
                 {/* One-line plain-English subtitle — the 30-second takeaway. */}
                 <div
                   style={{

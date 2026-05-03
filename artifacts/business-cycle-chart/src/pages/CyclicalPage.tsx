@@ -746,6 +746,8 @@ export default function CyclicalPage() {
                 display: "flex",
                 alignItems: "baseline",
                 justifyContent: "space-between",
+                flexWrap: "wrap",
+                gap: "4px 12px",
               }}
             >
               <div
@@ -755,6 +757,7 @@ export default function CyclicalPage() {
                   color: "rgba(230,235,245,0.98)",
                   letterSpacing: "-0.01em",
                   fontFamily: "'Inter', sans-serif",
+                  minWidth: 0,
                 }}
               >
                 Components · {payload.latestQuarterLabel}
@@ -764,6 +767,7 @@ export default function CyclicalPage() {
                   fontSize: 11,
                   color: "rgba(180,180,200,0.55)",
                   fontFamily: "'JetBrains Mono', monospace",
+                  minWidth: 0,
                 }}
               >
                 Real, chained 2017 dollars · SAAR

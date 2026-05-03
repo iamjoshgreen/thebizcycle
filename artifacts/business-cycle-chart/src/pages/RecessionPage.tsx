@@ -664,7 +664,7 @@ export default function RecessionPage() {
               }}
               data-testid="cji-headline"
             >
-              <div style={{ flexShrink: 0, minWidth: 0 }}>
+              <div style={{ flex: "0 1 auto", minWidth: 0, maxWidth: "100%" }}>
                 <div
                   style={{
                     color: "rgba(180,180,200,0.5)",
@@ -697,10 +697,10 @@ export default function RecessionPage() {
                     marginTop: 8,
                   }}
                 >
-                  Avg of % off-peak · Residential Construction & Durable Goods
+                  Avg of % off-peak · Residential Construction <span style={{ whiteSpace: "nowrap" }}>& Durable Goods</span>
                 </div>
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ flex: "1 1 260px", minWidth: 0 }}>
                 <div
                   style={{
                     display: "inline-block",
