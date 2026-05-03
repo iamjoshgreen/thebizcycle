@@ -880,7 +880,7 @@ export default function ChannelPage() {
 
         {/* Legend */}
         <div
-          className="absolute top-3 left-3 z-10 px-3 py-2 rounded"
+          className="absolute top-3 left-3 z-10 hidden sm:block px-3 py-2 rounded"
           style={{
             background: "hsl(230 14% 9% / 0.85)",
             backdropFilter: "blur(8px)",

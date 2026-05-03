@@ -630,7 +630,7 @@ export default function FractalPage() {
         {/* Legend */}
         {spxM2.length > 0 && (
           <div
-            className="absolute top-3 left-4 z-10 flex flex-col gap-1.5 px-3 py-2 rounded"
+            className="absolute top-3 left-4 z-10 hidden sm:flex flex-col gap-1.5 px-3 py-2 rounded"
             style={{
               background: "hsl(230 14% 9% / 0.78)",
               backdropFilter: "blur(8px)",
