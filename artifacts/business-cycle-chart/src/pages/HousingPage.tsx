@@ -8,6 +8,24 @@ import type {
 import TopBar from "@/components/TopBar";
 import { useToast } from "@/hooks/use-toast";
 
+// NBER-dated US recession periods (peak month → trough month). Sourced from
+// the NBER Business Cycle Dating Committee. Used to overlay gray vertical
+// bands on long-history charts so the metric's track record across cycles
+// is legible. Stored as unix seconds for direct comparison with FRED data.
+const NBER_RECESSIONS: { start: number; end: number }[] = [
+  ["1969-12-01", "1970-11-01"],
+  ["1973-11-01", "1975-03-01"],
+  ["1980-01-01", "1980-07-01"],
+  ["1981-07-01", "1982-11-01"],
+  ["1990-07-01", "1991-03-01"],
+  ["2001-03-01", "2001-11-01"],
+  ["2007-12-01", "2009-06-01"],
+  ["2020-02-01", "2020-04-01"],
+].map(([s, e]) => ({
+  start: Math.floor(Date.parse(s + "T00:00:00Z") / 1000),
+  end: Math.floor(Date.parse(e + "T00:00:00Z") / 1000),
+}));
+
 const STATE_COLORS: Record<string, { fg: string; bg: string; border: string; dot: string }> = {
   expanding: {
     fg: "rgba(180,210,200,0.95)",
@@ -150,7 +168,7 @@ interface CmsChartProps {
   height?: number;
 }
 
-function CmsChart({ monthsSupply, completed, width = 1200, height = 240 }: CmsChartProps) {
+function CmsChart({ monthsSupply, completed, width = 1200, height = 280 }: CmsChartProps) {
   if (monthsSupply.length < 2 || completed.length < 2) {
     return (
       <div
@@ -203,11 +221,14 @@ function CmsChart({ monthsSupply, completed, width = 1200, height = 240 }: CmsCh
   const yTicks: number[] = [];
   for (let v = 0; v <= yMax; v += 2) yTicks.push(v);
 
-  // X ticks at every 2 years.
+  // X ticks: density adapts to the time span so a 60-year chart isn't a wall
+  // of labels and a 10-year chart isn't sparse.
   const startYear = new Date(xMin * 1000).getUTCFullYear();
   const endYear = new Date(xMax * 1000).getUTCFullYear();
+  const span = endYear - startYear;
+  const tickStep = span > 40 ? 10 : span > 20 ? 5 : 2;
   const xTicks: { x: number; label: string }[] = [];
-  for (let yr = Math.ceil(startYear / 2) * 2; yr <= endYear; yr += 2) {
+  for (let yr = Math.ceil(startYear / tickStep) * tickStep; yr <= endYear; yr += tickStep) {
     const ts = Math.floor(Date.UTC(yr, 0, 1) / 1000);
     if (ts < xMin || ts > xMax) continue;
     xTicks.push({ x: x(ts), label: String(yr) });
@@ -222,6 +243,24 @@ function CmsChart({ monthsSupply, completed, width = 1200, height = 240 }: CmsCh
       preserveAspectRatio="none"
       style={{ display: "block", width: "100%", height }}
     >
+      {/* NBER recession bands — gray vertical shading for each historical
+          recession that overlaps the visible window. Drawn first so the lines
+          and threshold bands sit on top. */}
+      {NBER_RECESSIONS.filter((r) => r.end >= xMin && r.start <= xMax).map((r) => {
+        const x1 = x(Math.max(r.start, xMin));
+        const x2 = x(Math.min(r.end, xMax));
+        return (
+          <rect
+            key={r.start}
+            x={x1}
+            y={padT}
+            width={Math.max(1, x2 - x1)}
+            height={height - padT - padB}
+            fill="rgba(180,180,200,0.13)"
+          />
+        );
+      })}
+
       {/* Threshold band shading (above 7 = warning, above 8 = recession) */}
       <rect
         x={padL}
@@ -334,7 +373,7 @@ interface PctCompletedChartProps {
   height?: number;
 }
 
-function PctCompletedChart({ data, width = 1200, height = 200 }: PctCompletedChartProps) {
+function PctCompletedChart({ data, width = 1200, height = 240 }: PctCompletedChartProps) {
   if (data.length < 2) {
     return (
       <div
@@ -384,8 +423,10 @@ function PctCompletedChart({ data, width = 1200, height = 200 }: PctCompletedCha
 
   const startYear = new Date(xMin * 1000).getUTCFullYear();
   const endYear = new Date(xMax * 1000).getUTCFullYear();
+  const span = endYear - startYear;
+  const tickStep = span > 40 ? 10 : span > 20 ? 5 : 2;
   const xTicks: { x: number; label: string }[] = [];
-  for (let yr = Math.ceil(startYear / 2) * 2; yr <= endYear; yr += 2) {
+  for (let yr = Math.ceil(startYear / tickStep) * tickStep; yr <= endYear; yr += tickStep) {
     const ts = Math.floor(Date.UTC(yr, 0, 1) / 1000);
     if (ts < xMin || ts > xMax) continue;
     xTicks.push({ x: x(ts), label: String(yr) });
@@ -399,6 +440,22 @@ function PctCompletedChart({ data, width = 1200, height = 200 }: PctCompletedCha
       preserveAspectRatio="none"
       style={{ display: "block", width: "100%", height }}
     >
+      {/* NBER recession bands */}
+      {NBER_RECESSIONS.filter((r) => r.end >= xMin && r.start <= xMax).map((r) => {
+        const x1 = x(Math.max(r.start, xMin));
+        const x2 = x(Math.min(r.end, xMax));
+        return (
+          <rect
+            key={r.start}
+            x={x1}
+            y={padT}
+            width={Math.max(1, x2 - x1)}
+            height={height - padT - padB}
+            fill="rgba(180,180,200,0.13)"
+          />
+        );
+      })}
+
       {/* Historical "normal" band: 20-30% completed */}
       <rect
         x={padL}
@@ -690,6 +747,7 @@ function CompletedMonthsSupplySection({ cms }: { cms: CompletedMonthsSupply }) {
           <LegendDot color="rgba(96,165,250,0.95)" label="Completed months supply" />
           <LegendDot color="rgba(245,158,11,0.6)" label="7 · elevated" />
           <LegendDot color="rgba(239,68,68,0.6)" label="8 · recession-territory" />
+          <LegendDot color="rgba(180,180,200,0.35)" label="NBER recession" />
         </div>
         <CmsChart
           monthsSupply={cms.monthsSupplyHistory}
@@ -738,6 +796,7 @@ function CompletedMonthsSupplySection({ cms }: { cms: CompletedMonthsSupply }) {
         >
           <LegendDot color="rgba(96,165,250,0.95)" label="% completed (NHFSEPCS / NHFSEPTS)" />
           <LegendDot color="rgba(96,165,250,0.5)" label="20–30% · historical normal band" />
+          <LegendDot color="rgba(180,180,200,0.35)" label="NBER recession" />
         </div>
         <PctCompletedChart data={cms.pctCompletedHistory} />
       </div>

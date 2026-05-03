@@ -97,9 +97,9 @@ const SERIES: Array<{ id: DominoStatus["id"]; label: string; series: string }> =
   { id: "homePrices", label: "Case-Shiller Home Prices", series: "CSUSHPINSA" },
 ];
 
-async function fetchFredAll(series: string): Promise<MonthlyPoint[]> {
+async function fetchFredAll(series: string, observationStart = "1990-01-01"): Promise<MonthlyPoint[]> {
   if (!FRED_KEY) throw new Error("FRED_API_KEY not set");
-  const url = `${FRED_BASE}?series_id=${series}&api_key=${FRED_KEY}&file_type=json&observation_start=1990-01-01`;
+  const url = `${FRED_BASE}?series_id=${series}&api_key=${FRED_KEY}&file_type=json&observation_start=${observationStart}`;
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(`FRED error ${resp.status} for ${series}`);
   const json = (await resp.json()) as { observations: Array<{ date: string; value: string }> };
@@ -418,9 +418,12 @@ function makeFedContext(fed: FedStatus, fedAll: MonthlyPoint[]): string {
 //
 // We tolerate any of these series being unavailable and degrade gracefully.
 
-async function fetchFredSafe(series: string): Promise<MonthlyPoint[]> {
+async function fetchFredSafe(
+  series: string,
+  observationStart = "1990-01-01"
+): Promise<MonthlyPoint[]> {
   try {
-    return await fetchFredAll(series);
+    return await fetchFredAll(series, observationStart);
   } catch (err) {
     logger.warn({ err, series }, "Failed to fetch FRED series; continuing without it");
     return [];
@@ -450,11 +453,13 @@ function computeCompletedMonthsSupply(
     }
   }
 
-  // Trim history to last ~10 years for the chart payload.
-  const trim = <T>(arr: T[], n: number) => arr.slice(-n);
-  const msHist10y = trim(msHistory, 12 * 10);
-  const cmsHist10y = trim(cmsHistory, 12 * 10);
-  const pctHist10y = trim(pctHistory, 12 * 10);
+  // Return the full available FRED history. MSACSR starts in 1963 and the
+  // inventory composition series start in 1973, so this gives the chart
+  // multiple recessions to anchor against (1973-75, 1980, 1981-82, 1990-91,
+  // 2001, 2008, 2020) — necessary for the metric to show its track record.
+  const msHist10y = msHistory;
+  const cmsHist10y = cmsHistory;
+  const pctHist10y = pctHistory;
 
   if (msHistory.length === 0 || cmsHistory.length === 0) {
     return {
@@ -577,9 +582,12 @@ export async function fetchHousingPayload(): Promise<HousingPayload> {
 
   const [fedfundsAll, msacsrAll, completedAll, totalAll, ...seriesData] = await Promise.all([
     fetchFredAll("FEDFUNDS"),
-    fetchFredSafe("MSACSR"),
-    fetchFredSafe("NHFSEPCS"),
-    fetchFredSafe("NHFSEPTS"),
+    // Pull the CMS series from their FRED inception (MSACSR=1963, inventory
+    // series=1973) so the chart spans every postwar recession, not just the
+    // last three. The other dominoes still use the default 1990 start.
+    fetchFredSafe("MSACSR", "1963-01-01"),
+    fetchFredSafe("NHFSEPCS", "1973-01-01"),
+    fetchFredSafe("NHFSEPTS", "1973-01-01"),
     ...SERIES.map((s) => fetchFredAll(s.series)),
   ]);
 
