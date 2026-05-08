@@ -1,5 +1,6 @@
 import { Fragment, useCallback } from "react";
-import { useGetHousing, useRefreshHousing } from "@workspace/api-client-react";
+import { useGetHousing, useRefreshHousing, getGetHousingQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import type {
   CompletedMonthsSupply,
   DominoStatus,
@@ -1112,18 +1113,28 @@ function DominoCard({ d, index }: { d: DominoStatus; index: number }) {
 
 export default function HousingPage() {
   const { toast } = useToast();
-  const { data, isLoading } = useGetHousing();
+  const queryClient = useQueryClient();
+  const { data, isLoading, isError } = useGetHousing();
   const refreshMutation = useRefreshHousing();
 
   const handleRefresh = useCallback(() => {
     refreshMutation.mutate(undefined, {
-      onError: () =>
-        toast({ title: "Refresh failed", description: "Showing cached data", variant: "destructive" }),
+      onSuccess: (fresh) => {
+        queryClient.setQueryData(getGetHousingQueryKey(), fresh);
+        queryClient.invalidateQueries({ queryKey: getGetHousingQueryKey() });
+      },
+      onError: (err) =>
+        toast({
+          title: "Refresh failed",
+          description: err instanceof Error ? err.message : "Could not reach FRED",
+          variant: "destructive",
+        }),
     });
-  }, [refreshMutation, toast]);
+  }, [refreshMutation, queryClient, toast]);
 
-  const payload = refreshMutation.data ?? data;
+  const payload = data;
   const lastUpdated = payload?.lastUpdated ?? null;
+  const noData = !isLoading && !payload;
 
   return (
     <div className="flex flex-col w-full h-full overflow-hidden" style={{ background: "#0A0A0D" }}>
@@ -1141,7 +1152,18 @@ export default function HousingPage() {
               style={{ borderTopColor: "hsl(224 100% 58%)", borderRightColor: "hsl(224 100% 58% / 0.3)" }}
             />
             <span style={{ color: "hsl(220 10% 40%)", fontFamily: "'JetBrains Mono', monospace", fontSize: 12 }}>
-              Fetching FRED housing data…
+              Loading from database…
+            </span>
+          </div>
+        )}
+
+        {noData && (
+          <div className="flex flex-col items-center justify-center gap-2 py-20 text-center">
+            <span style={{ color: "rgba(220,225,235,0.85)", fontFamily: "'Inter', sans-serif", fontSize: 14 }}>
+              {isError ? "No housing data in the database yet." : "No housing data."}
+            </span>
+            <span style={{ color: "rgba(200,200,220,0.5)", fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>
+              Click Refresh to load fresh data from FRED.
             </span>
           </div>
         )}

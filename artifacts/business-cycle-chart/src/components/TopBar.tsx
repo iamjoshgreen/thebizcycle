@@ -171,7 +171,7 @@ export default function TopBar({ lastUpdated, isRefreshing, onRefresh, saveStatu
             className="text-xs hidden md:inline"
             style={{ color: "hsl(220 10% 30%)", fontFamily: "'JetBrains Mono', monospace" }}
           >
-            No data cached
+            No data yet
           </span>
         )}
         <button

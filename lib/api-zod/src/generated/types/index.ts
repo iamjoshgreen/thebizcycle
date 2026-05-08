@@ -27,6 +27,7 @@ export * from "./healthStatus";
 export * from "./housingPayload";
 export * from "./monthlyPoint";
 export * from "./nberRecessionInterval";
+export * from "./noDataError";
 export * from "./overlays";
 export * from "./recessionInterval";
 export * from "./recessionPayload";

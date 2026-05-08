@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
-import { useGetRecession, useRefreshRecession } from "@workspace/api-client-react";
+import { useGetRecession, useRefreshRecession, getGetRecessionQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import type {
   RecessionPayload,
   SectorStats,
@@ -585,22 +586,28 @@ function PayemsChart({ data, recessions, width = 1200, height = 130 }: PayemsCha
 
 export default function RecessionPage() {
   const { toast } = useToast();
-  const { data, isLoading } = useGetRecession();
+  const queryClient = useQueryClient();
+  const { data, isLoading, isError } = useGetRecession();
   const refreshMutation = useRefreshRecession();
 
   const handleRefresh = useCallback(() => {
     refreshMutation.mutate(undefined, {
-      onError: () =>
+      onSuccess: (fresh) => {
+        queryClient.setQueryData(getGetRecessionQueryKey(), fresh);
+        queryClient.invalidateQueries({ queryKey: getGetRecessionQueryKey() });
+      },
+      onError: (err) =>
         toast({
           title: "Refresh failed",
-          description: "Showing cached data",
+          description: err instanceof Error ? err.message : "Could not reach FRED",
           variant: "destructive",
         }),
     });
-  }, [refreshMutation, toast]);
+  }, [refreshMutation, queryClient, toast]);
 
-  const payload: RecessionPayload | undefined = refreshMutation.data ?? data;
+  const payload: RecessionPayload | undefined = data as RecessionPayload | undefined;
   const lastUpdated = payload?.lastUpdated ?? null;
+  const noData = !isLoading && !payload;
 
   const headlineColors = useMemo(
     () => STATUS_COLORS[payload?.cjiStatus ?? "insufficient"] ?? STATUS_COLORS.insufficient,
@@ -635,7 +642,18 @@ export default function RecessionPage() {
                 fontSize: 12,
               }}
             >
-              Fetching FRED recession data…
+              Loading from database…
+            </span>
+          </div>
+        )}
+
+        {noData && (
+          <div className="flex flex-col items-center justify-center gap-2 py-20 text-center">
+            <span style={{ color: "rgba(220,225,235,0.85)", fontFamily: "'Inter', sans-serif", fontSize: 14 }}>
+              {isError ? "No recession data in the database yet." : "No recession data."}
+            </span>
+            <span style={{ color: "rgba(200,200,220,0.5)", fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>
+              Click Refresh to load fresh data from FRED.
             </span>
           </div>
         )}

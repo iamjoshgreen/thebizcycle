@@ -2,6 +2,7 @@ import YahooFinanceClass from "yahoo-finance2";
 // yahoo-finance2 v3 requires instantiation
 const yahooFinance = new YahooFinanceClass();
 import { logger } from "./logger.js";
+import { fetchWithRetry } from "./fetchWithRetry.js";
 
 const FRED_BASE = "https://api.stlouisfed.org/fred/series/observations";
 const FRED_KEY = process.env.FRED_API_KEY;
@@ -69,7 +70,7 @@ async function fetchFredMonthly(series: string, units?: string): Promise<Map<str
   if (!FRED_KEY) throw new Error("FRED_API_KEY not set");
   const unitsParam = units ? `&units=${units}` : "";
   const url = `${FRED_BASE}?series_id=${series}&api_key=${FRED_KEY}&file_type=json&observation_start=1959-01-01&frequency=m${unitsParam}`;
-  const resp = await fetch(url);
+  const resp = await fetchWithRetry(url, { label: `FRED ${series}` });
   if (!resp.ok) throw new Error(`FRED error ${resp.status} for ${series}`);
   const json = (await resp.json()) as { observations: Array<{ date: string; value: string }> };
   const map = new Map<string, number>();
@@ -84,7 +85,7 @@ async function fetchFredMonthly(series: string, units?: string): Promise<Map<str
 async function fetchFredWeekly(series: string): Promise<Map<string, number>> {
   if (!FRED_KEY) throw new Error("FRED_API_KEY not set");
   const url = `${FRED_BASE}?series_id=${series}&api_key=${FRED_KEY}&file_type=json&observation_start=1959-01-01&frequency=w&aggregation_method=eop`;
-  const resp = await fetch(url);
+  const resp = await fetchWithRetry(url, { label: `FRED ${series}` });
   if (!resp.ok) throw new Error(`FRED error ${resp.status} for ${series}`);
   const json = (await resp.json()) as { observations: Array<{ date: string; value: string }> };
   const map = new Map<string, number>();

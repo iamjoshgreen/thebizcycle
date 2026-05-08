@@ -33,8 +33,8 @@ paths:
     get:
       operationId: getChart
       tags: [chart]
-      summary: Get chart data
-      description: Returns composite, SPX, recessions, overlays, and lastUpdated timestamp
+      summary: Get chart data from the database
+      description: Pure database SELECT. Returns 404 if no row has ever been written for this indicator.
       responses:
         "200":
           description: Chart payload
@@ -42,6 +42,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ChartPayload"
+        "404":
+          description: No data has been saved for this indicator yet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NoDataError"
 
   /refresh:
     post:
@@ -61,8 +67,8 @@ paths:
     get:
       operationId: getHousing
       tags: [housing]
-      summary: Get housing domino payload
-      description: Returns the residential construction cycle dominoes, stage, and Fed status
+      summary: Get housing domino payload from the database
+      description: Pure database SELECT. Returns 404 if no row has ever been written for this indicator.
       responses:
         "200":
           description: Housing payload
@@ -70,6 +76,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HousingPayload"
+        "404":
+          description: No data has been saved for this indicator yet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NoDataError"
 
   /housing/refresh:
     post:
@@ -88,8 +100,8 @@ paths:
     get:
       operationId: getRecession
       tags: [recession]
-      summary: Get recession indicator payload
-      description: Returns CJI, per-sector stats, historical CJI, NBER recession periods, and PAYEMS YoY context series
+      summary: Get recession indicator payload from the database
+      description: Pure database SELECT. Returns 404 if no row has ever been written for this indicator.
       responses:
         "200":
           description: Recession payload
@@ -97,6 +109,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RecessionPayload"
+        "404":
+          description: No data has been saved for this indicator yet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NoDataError"
 
   /recession/refresh:
     post:
@@ -115,8 +133,8 @@ paths:
     get:
       operationId: getCyclical
       tags: [cyclical]
-      summary: Get cyclical GDP indicator payload
-      description: Returns cyclical GDP growth (durables + residential investment + business equipment), components, history, and contraction-frequency stats
+      summary: Get cyclical GDP indicator payload from the database
+      description: Pure database SELECT. Returns 404 if no row has ever been written for this indicator.
       responses:
         "200":
           description: Cyclical GDP payload
@@ -124,6 +142,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CyclicalPayload"
+        "404":
+          description: No data has been saved for this indicator yet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NoDataError"
 
   /settings/{key}:
     parameters:
@@ -176,6 +200,13 @@ paths:
 
 components:
   schemas:
+    NoDataError:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
     SettingsPayload:
       type: object
       properties:
@@ -258,7 +289,7 @@ components:
           $ref: "#/components/schemas/Overlays"
         lastUpdated:
           type: number
-          description: Unix timestamp in seconds when cache was populated
+          description: Unix timestamp in seconds when this row was last refreshed and stored in the database
       required:
         - composite
         - spx

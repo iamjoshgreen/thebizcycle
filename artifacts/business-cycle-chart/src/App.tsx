@@ -12,8 +12,10 @@ import CyclicalPage from "@/pages/CyclicalPage";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      retry: 1,
-      staleTime: 5 * 60 * 1000,
+      retry: false,
+      staleTime: 0,
+      gcTime: 0,
+      refetchOnWindowFocus: false,
     },
   },
 });

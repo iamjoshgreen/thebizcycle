@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useGetChart, useRefreshChart } from "@workspace/api-client-react";
+import { useGetChart, useRefreshChart, getGetChartQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ColorType,
   createChart,
@@ -53,6 +54,7 @@ function formatDateLabel(ts: number): string {
 
 export default function FractalPage() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { data: chartData, isLoading } = useGetChart();
   const refreshMutation = useRefreshChart();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -95,20 +97,24 @@ export default function FractalPage() {
   const anchorLineARef = useRef<IPriceLine | null>(null);
   const anchorLineBRef = useRef<IPriceLine | null>(null);
 
-  const payload = refreshMutation.data ?? chartData;
+  const payload = chartData;
   const spxM2 = payload?.spxM2 ?? [];
   const lastUpdated = payload?.lastUpdated ?? null;
 
   const handleRefresh = useCallback(() => {
     refreshMutation.mutate(undefined, {
-      onError: () =>
+      onSuccess: (fresh) => {
+        queryClient.setQueryData(getGetChartQueryKey(), fresh);
+        queryClient.invalidateQueries({ queryKey: getGetChartQueryKey() });
+      },
+      onError: (err) =>
         toast({
           title: "Refresh failed",
-          description: "Showing cached data",
+          description: err instanceof Error ? err.message : "Could not reach FRED",
           variant: "destructive",
         }),
     });
-  }, [refreshMutation, toast]);
+  }, [refreshMutation, queryClient, toast]);
 
   // Initialize chart once
   useEffect(() => {

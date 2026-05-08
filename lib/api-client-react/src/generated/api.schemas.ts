@@ -5,6 +5,10 @@
  * Business Cycle Chart API
  * OpenAPI spec version: 0.1.0
  */
+export interface NoDataError {
+  error: string;
+}
+
 /**
  * Free-form settings JSON object, or null if nothing has been saved yet
  */
@@ -61,7 +65,7 @@ export interface ChartPayload {
   spxM2: DataPoint[];
   recessions: RecessionInterval[];
   overlays: Overlays;
-  /** Unix timestamp in seconds when cache was populated */
+  /** Unix timestamp in seconds when this row was last refreshed and stored in the database */
   lastUpdated: number;
 }
 

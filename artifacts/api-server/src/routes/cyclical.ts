@@ -3,35 +3,34 @@ import {
   fetchCyclicalPayload,
   type CyclicalPayload,
 } from "../lib/cyclicalFetcher.js";
-import { readCache, writeCache, tryWriteCache } from "../lib/cache.js";
+import { readIndicator, writeIndicator } from "../lib/indicatorStore.js";
 
 const router = Router();
-const CACHE_KEY = "cyclical_payload";
+const NAME = "cyclical";
 
 router.get("/cyclical", async (req, res) => {
   try {
-    const cached = await readCache<CyclicalPayload>(CACHE_KEY);
-    if (cached) {
-      res.json(cached);
+    const data = await readIndicator<CyclicalPayload>(NAME);
+    if (!data) {
+      res.status(404).json({ error: "no data" });
       return;
     }
-    const payload = await fetchCyclicalPayload();
-    await tryWriteCache(CACHE_KEY, payload);
-    res.json(payload);
+    res.json(data);
   } catch (err) {
-    req.log.error({ err }, "Error fetching cyclical data");
-    res.status(500).json({ error: "Failed to fetch cyclical data" });
+    req.log.error({ err }, "Error reading cyclical data from database");
+    res.status(500).json({ error: "Failed to read cyclical data" });
   }
 });
 
 router.post("/cyclical/refresh", async (req, res) => {
   try {
     const payload = await fetchCyclicalPayload();
-    await writeCache(CACHE_KEY, payload);
+    await writeIndicator(NAME, payload);
     res.json(payload);
   } catch (err) {
     req.log.error({ err }, "Error refreshing cyclical data");
-    res.status(500).json({ error: "Failed to refresh cyclical data" });
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    res.status(502).json({ error: `Failed to refresh cyclical data: ${msg}` });
   }
 });
 

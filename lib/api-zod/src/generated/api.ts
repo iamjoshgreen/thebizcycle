@@ -16,8 +16,8 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
- * Returns composite, SPX, recessions, overlays, and lastUpdated timestamp
- * @summary Get chart data
+ * Pure database SELECT. Returns 404 if no row has ever been written for this indicator.
+ * @summary Get chart data from the database
  */
 export const GetChartResponse = zod.object({
   composite: zod.array(
@@ -94,7 +94,9 @@ export const GetChartResponse = zod.object({
   }),
   lastUpdated: zod
     .number()
-    .describe("Unix timestamp in seconds when cache was populated"),
+    .describe(
+      "Unix timestamp in seconds when this row was last refreshed and stored in the database",
+    ),
 });
 
 /**
@@ -176,12 +178,14 @@ export const RefreshChartResponse = zod.object({
   }),
   lastUpdated: zod
     .number()
-    .describe("Unix timestamp in seconds when cache was populated"),
+    .describe(
+      "Unix timestamp in seconds when this row was last refreshed and stored in the database",
+    ),
 });
 
 /**
- * Returns the residential construction cycle dominoes, stage, and Fed status
- * @summary Get housing domino payload
+ * Pure database SELECT. Returns 404 if no row has ever been written for this indicator.
+ * @summary Get housing domino payload from the database
  */
 export const GetHousingResponse = zod.object({
   fed: zod.object({
@@ -413,8 +417,8 @@ export const RefreshHousingResponse = zod.object({
 });
 
 /**
- * Returns CJI, per-sector stats, historical CJI, NBER recession periods, and PAYEMS YoY context series
- * @summary Get recession indicator payload
+ * Pure database SELECT. Returns 404 if no row has ever been written for this indicator.
+ * @summary Get recession indicator payload from the database
  */
 export const GetRecessionResponse = zod.object({
   cji: zod.number().nullable(),
@@ -532,8 +536,8 @@ export const RefreshRecessionResponse = zod.object({
 });
 
 /**
- * Returns cyclical GDP growth (durables + residential investment + business equipment), components, history, and contraction-frequency stats
- * @summary Get cyclical GDP indicator payload
+ * Pure database SELECT. Returns 404 if no row has ever been written for this indicator.
+ * @summary Get cyclical GDP indicator payload from the database
  */
 export const GetCyclicalResponse = zod.object({
   latestQuarter: zod

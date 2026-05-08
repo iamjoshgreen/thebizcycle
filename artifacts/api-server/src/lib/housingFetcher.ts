@@ -1,4 +1,5 @@
 import { logger } from "./logger.js";
+import { fetchWithRetry } from "./fetchWithRetry.js";
 
 const FRED_BASE = "https://api.stlouisfed.org/fred/series/observations";
 const FRED_KEY = process.env.FRED_API_KEY;
@@ -100,7 +101,7 @@ const SERIES: Array<{ id: DominoStatus["id"]; label: string; series: string }> =
 async function fetchFredAll(series: string, observationStart = "1990-01-01"): Promise<MonthlyPoint[]> {
   if (!FRED_KEY) throw new Error("FRED_API_KEY not set");
   const url = `${FRED_BASE}?series_id=${series}&api_key=${FRED_KEY}&file_type=json&observation_start=${observationStart}`;
-  const resp = await fetch(url);
+  const resp = await fetchWithRetry(url, { label: `FRED ${series}` });
   if (!resp.ok) throw new Error(`FRED error ${resp.status} for ${series}`);
   const json = (await resp.json()) as { observations: Array<{ date: string; value: string }> };
   const points: MonthlyPoint[] = [];

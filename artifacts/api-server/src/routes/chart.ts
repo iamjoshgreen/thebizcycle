@@ -1,34 +1,33 @@
 import { Router } from "express";
 import { fetchAndCompute, type ChartPayload } from "../lib/dataFetcher.js";
-import { readCache, writeCache, tryWriteCache } from "../lib/cache.js";
+import { readIndicator, writeIndicator } from "../lib/indicatorStore.js";
 
 const router = Router();
-const CACHE_KEY = "chart_payload";
+const NAME = "chart";
 
 router.get("/chart", async (req, res) => {
   try {
-    const cached = await readCache<ChartPayload>(CACHE_KEY);
-    if (cached) {
-      res.json(cached);
+    const data = await readIndicator<ChartPayload>(NAME);
+    if (!data) {
+      res.status(404).json({ error: "no data" });
       return;
     }
-    const payload = await fetchAndCompute();
-    await tryWriteCache(CACHE_KEY, payload);
-    res.json(payload);
+    res.json(data);
   } catch (err) {
-    req.log.error({ err }, "Error fetching chart data");
-    res.status(500).json({ error: "Failed to fetch chart data" });
+    req.log.error({ err }, "Error reading chart data from database");
+    res.status(500).json({ error: "Failed to read chart data" });
   }
 });
 
 router.post("/refresh", async (req, res) => {
   try {
     const payload = await fetchAndCompute();
-    await writeCache(CACHE_KEY, payload);
+    await writeIndicator(NAME, payload);
     res.json(payload);
   } catch (err) {
     req.log.error({ err }, "Error refreshing chart data");
-    res.status(500).json({ error: "Failed to refresh chart data" });
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    res.status(502).json({ error: `Failed to refresh chart data: ${msg}` });
   }
 });
 

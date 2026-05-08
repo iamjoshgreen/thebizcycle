@@ -21,6 +21,7 @@ import type {
   CyclicalPayload,
   HealthStatus,
   HousingPayload,
+  NoDataError,
   RecessionPayload,
   SettingsPayload,
   SettingsWriteBody,
@@ -112,8 +113,8 @@ export function useHealthCheck<
 }
 
 /**
- * Returns composite, SPX, recessions, overlays, and lastUpdated timestamp
- * @summary Get chart data
+ * Pure database SELECT. Returns 404 if no row has ever been written for this indicator.
+ * @summary Get chart data from the database
  */
 export const getGetChartUrl = () => {
   return `/api/chart`;
@@ -134,7 +135,7 @@ export const getGetChartQueryKey = () => {
 
 export const getGetChartQueryOptions = <
   TData = Awaited<ReturnType<typeof getChart>>,
-  TError = ErrorType<unknown>,
+  TError = ErrorType<NoDataError>,
 >(options?: {
   query?: UseQueryOptions<Awaited<ReturnType<typeof getChart>>, TError, TData>;
   request?: SecondParameter<typeof customFetch>;
@@ -157,15 +158,15 @@ export const getGetChartQueryOptions = <
 export type GetChartQueryResult = NonNullable<
   Awaited<ReturnType<typeof getChart>>
 >;
-export type GetChartQueryError = ErrorType<unknown>;
+export type GetChartQueryError = ErrorType<NoDataError>;
 
 /**
- * @summary Get chart data
+ * @summary Get chart data from the database
  */
 
 export function useGetChart<
   TData = Awaited<ReturnType<typeof getChart>>,
-  TError = ErrorType<unknown>,
+  TError = ErrorType<NoDataError>,
 >(options?: {
   query?: UseQueryOptions<Awaited<ReturnType<typeof getChart>>, TError, TData>;
   request?: SecondParameter<typeof customFetch>;
@@ -262,8 +263,8 @@ export const useRefreshChart = <
 };
 
 /**
- * Returns the residential construction cycle dominoes, stage, and Fed status
- * @summary Get housing domino payload
+ * Pure database SELECT. Returns 404 if no row has ever been written for this indicator.
+ * @summary Get housing domino payload from the database
  */
 export const getGetHousingUrl = () => {
   return `/api/housing`;
@@ -284,7 +285,7 @@ export const getGetHousingQueryKey = () => {
 
 export const getGetHousingQueryOptions = <
   TData = Awaited<ReturnType<typeof getHousing>>,
-  TError = ErrorType<unknown>,
+  TError = ErrorType<NoDataError>,
 >(options?: {
   query?: UseQueryOptions<
     Awaited<ReturnType<typeof getHousing>>,
@@ -311,15 +312,15 @@ export const getGetHousingQueryOptions = <
 export type GetHousingQueryResult = NonNullable<
   Awaited<ReturnType<typeof getHousing>>
 >;
-export type GetHousingQueryError = ErrorType<unknown>;
+export type GetHousingQueryError = ErrorType<NoDataError>;
 
 /**
- * @summary Get housing domino payload
+ * @summary Get housing domino payload from the database
  */
 
 export function useGetHousing<
   TData = Awaited<ReturnType<typeof getHousing>>,
-  TError = ErrorType<unknown>,
+  TError = ErrorType<NoDataError>,
 >(options?: {
   query?: UseQueryOptions<
     Awaited<ReturnType<typeof getHousing>>,
@@ -419,8 +420,8 @@ export const useRefreshHousing = <
 };
 
 /**
- * Returns CJI, per-sector stats, historical CJI, NBER recession periods, and PAYEMS YoY context series
- * @summary Get recession indicator payload
+ * Pure database SELECT. Returns 404 if no row has ever been written for this indicator.
+ * @summary Get recession indicator payload from the database
  */
 export const getGetRecessionUrl = () => {
   return `/api/recession`;
@@ -441,7 +442,7 @@ export const getGetRecessionQueryKey = () => {
 
 export const getGetRecessionQueryOptions = <
   TData = Awaited<ReturnType<typeof getRecession>>,
-  TError = ErrorType<unknown>,
+  TError = ErrorType<NoDataError>,
 >(options?: {
   query?: UseQueryOptions<
     Awaited<ReturnType<typeof getRecession>>,
@@ -468,15 +469,15 @@ export const getGetRecessionQueryOptions = <
 export type GetRecessionQueryResult = NonNullable<
   Awaited<ReturnType<typeof getRecession>>
 >;
-export type GetRecessionQueryError = ErrorType<unknown>;
+export type GetRecessionQueryError = ErrorType<NoDataError>;
 
 /**
- * @summary Get recession indicator payload
+ * @summary Get recession indicator payload from the database
  */
 
 export function useGetRecession<
   TData = Awaited<ReturnType<typeof getRecession>>,
-  TError = ErrorType<unknown>,
+  TError = ErrorType<NoDataError>,
 >(options?: {
   query?: UseQueryOptions<
     Awaited<ReturnType<typeof getRecession>>,
@@ -576,8 +577,8 @@ export const useRefreshRecession = <
 };
 
 /**
- * Returns cyclical GDP growth (durables + residential investment + business equipment), components, history, and contraction-frequency stats
- * @summary Get cyclical GDP indicator payload
+ * Pure database SELECT. Returns 404 if no row has ever been written for this indicator.
+ * @summary Get cyclical GDP indicator payload from the database
  */
 export const getGetCyclicalUrl = () => {
   return `/api/cyclical`;
@@ -598,7 +599,7 @@ export const getGetCyclicalQueryKey = () => {
 
 export const getGetCyclicalQueryOptions = <
   TData = Awaited<ReturnType<typeof getCyclical>>,
-  TError = ErrorType<unknown>,
+  TError = ErrorType<NoDataError>,
 >(options?: {
   query?: UseQueryOptions<
     Awaited<ReturnType<typeof getCyclical>>,
@@ -625,15 +626,15 @@ export const getGetCyclicalQueryOptions = <
 export type GetCyclicalQueryResult = NonNullable<
   Awaited<ReturnType<typeof getCyclical>>
 >;
-export type GetCyclicalQueryError = ErrorType<unknown>;
+export type GetCyclicalQueryError = ErrorType<NoDataError>;
 
 /**
- * @summary Get cyclical GDP indicator payload
+ * @summary Get cyclical GDP indicator payload from the database
  */
 
 export function useGetCyclical<
   TData = Awaited<ReturnType<typeof getCyclical>>,
-  TError = ErrorType<unknown>,
+  TError = ErrorType<NoDataError>,
 >(options?: {
   query?: UseQueryOptions<
     Awaited<ReturnType<typeof getCyclical>>,

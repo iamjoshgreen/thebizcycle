@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
-import { useGetCyclical, useRefreshCyclical } from "@workspace/api-client-react";
+import { useGetCyclical, useRefreshCyclical, getGetCyclicalQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import type {
   CyclicalPayload,
   CyclicalComponent,
@@ -488,16 +489,19 @@ function ContractionStat({
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function CyclicalPage() {
-  const { data, isLoading, error, refetch } = useGetCyclical();
+  const queryClient = useQueryClient();
+  const { data, isLoading, error, isError } = useGetCyclical();
   const refresh = useRefreshCyclical();
   const { toast } = useToast();
 
   const payload = data as CyclicalPayload | undefined;
+  const noData = !isLoading && !payload;
 
   const onRefresh = useCallback(async () => {
     try {
-      await refresh.mutateAsync();
-      await refetch();
+      const fresh = await refresh.mutateAsync();
+      queryClient.setQueryData(getGetCyclicalQueryKey(), fresh);
+      queryClient.invalidateQueries({ queryKey: getGetCyclicalQueryKey() });
       toast({ title: "Cyclical GDP data refreshed" });
     } catch (err) {
       toast({
@@ -506,7 +510,7 @@ export default function CyclicalPage() {
         variant: "destructive",
       });
     }
-  }, [refresh, refetch, toast]);
+  }, [refresh, queryClient, toast]);
 
   const headlineColors = useMemo(() => {
     const status = payload?.status ?? "insufficient";
@@ -542,23 +546,29 @@ export default function CyclicalPage() {
             fontSize: 13,
           }}
         >
-          loading cyclical GDP data…
+          Loading from database…
         </div>
       )}
 
-      {error && (
+      {noData && (
         <div
           style={{
             flex: 1,
             display: "flex",
+            flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
-            color: "rgba(255,170,170,0.9)",
-            fontFamily: "'JetBrains Mono', monospace",
-            fontSize: 13,
+            gap: 8,
+            textAlign: "center",
+            padding: "0 16px",
           }}
         >
-          failed to load cyclical GDP data
+          <span style={{ color: "rgba(220,225,235,0.85)", fontFamily: "'Inter', sans-serif", fontSize: 14 }}>
+            {isError ? "No cyclical GDP data in the database yet." : "No cyclical GDP data."}
+          </span>
+          <span style={{ color: "rgba(200,200,220,0.5)", fontFamily: "'JetBrains Mono', monospace", fontSize: 11 }}>
+            Click Refresh to load fresh data from FRED.
+          </span>
         </div>
       )}
 

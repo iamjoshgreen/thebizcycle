@@ -1,34 +1,33 @@
 import { Router } from "express";
 import { fetchHousingPayload, type HousingPayload } from "../lib/housingFetcher.js";
-import { readCache, writeCache, tryWriteCache } from "../lib/cache.js";
+import { readIndicator, writeIndicator } from "../lib/indicatorStore.js";
 
 const router = Router();
-const CACHE_KEY = "housing_payload";
+const NAME = "housing";
 
 router.get("/housing", async (req, res) => {
   try {
-    const cached = await readCache<HousingPayload>(CACHE_KEY);
-    if (cached) {
-      res.json(cached);
+    const data = await readIndicator<HousingPayload>(NAME);
+    if (!data) {
+      res.status(404).json({ error: "no data" });
       return;
     }
-    const payload = await fetchHousingPayload();
-    await tryWriteCache(CACHE_KEY, payload);
-    res.json(payload);
+    res.json(data);
   } catch (err) {
-    req.log.error({ err }, "Error fetching housing data");
-    res.status(500).json({ error: "Failed to fetch housing data" });
+    req.log.error({ err }, "Error reading housing data from database");
+    res.status(500).json({ error: "Failed to read housing data" });
   }
 });
 
 router.post("/housing/refresh", async (req, res) => {
   try {
     const payload = await fetchHousingPayload();
-    await writeCache(CACHE_KEY, payload);
+    await writeIndicator(NAME, payload);
     res.json(payload);
   } catch (err) {
     req.log.error({ err }, "Error refreshing housing data");
-    res.status(500).json({ error: "Failed to refresh housing data" });
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    res.status(502).json({ error: `Failed to refresh housing data: ${msg}` });
   }
 });
 

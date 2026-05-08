@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useGetChart, useRefreshChart } from "@workspace/api-client-react";
+import { useGetChart, useRefreshChart, getGetChartQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ColorType,
   createChart,
@@ -202,6 +203,7 @@ const DEFAULT_CHANNEL_SETTINGS: ChannelSettings = {
 
 export default function ChannelPage() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { data: chartData, isLoading } = useGetChart();
   const refreshMutation = useRefreshChart();
 
@@ -241,20 +243,24 @@ export default function ChannelPage() {
   const anchorLineARef = useRef<IPriceLine | null>(null);
   const anchorLineBRef = useRef<IPriceLine | null>(null);
 
-  const payload = refreshMutation.data ?? chartData;
+  const payload = chartData;
   const spx = payload?.spx ?? [];
   const lastUpdated = payload?.lastUpdated ?? null;
 
   const handleRefresh = useCallback(() => {
     refreshMutation.mutate(undefined, {
-      onError: () =>
+      onSuccess: (fresh) => {
+        queryClient.setQueryData(getGetChartQueryKey(), fresh);
+        queryClient.invalidateQueries({ queryKey: getGetChartQueryKey() });
+      },
+      onError: (err) =>
         toast({
           title: "Refresh failed",
-          description: "Showing cached data",
+          description: err instanceof Error ? err.message : "Could not reach FRED",
           variant: "destructive",
         }),
     });
-  }, [refreshMutation, toast]);
+  }, [refreshMutation, queryClient, toast]);
 
   // Track disposal so any callback that races teardown can bail out.
   const disposedRef = useRef(false);

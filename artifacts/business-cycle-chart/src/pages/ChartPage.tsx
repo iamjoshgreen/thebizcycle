@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import { useGetChart, useRefreshChart } from "@workspace/api-client-react";
+import { useGetChart, useRefreshChart, getGetChartQueryKey } from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import TopBar from "@/components/TopBar";
 import Chart, { OVERLAY_CONFIG, type ChartHandle, type MeasureResult, type Overlays } from "@/components/Chart";
 import { useToast } from "@/hooks/use-toast";
@@ -29,7 +30,8 @@ function formatYears(y: number): string {
 
 export default function ChartPage() {
   const { toast } = useToast();
-  const { data: chartData, isLoading } = useGetChart();
+  const queryClient = useQueryClient();
+  const { data: chartData, isLoading, isError } = useGetChart();
   const refreshMutation = useRefreshChart();
   const chartRef = useRef<ChartHandle>(null);
 
@@ -49,11 +51,19 @@ export default function ChartPage() {
 
   const handleRefresh = useCallback(() => {
     refreshMutation.mutate(undefined, {
-      onError: () => {
-        toast({ title: "Refresh failed", description: "Showing cached data", variant: "destructive" });
+      onSuccess: (fresh) => {
+        queryClient.setQueryData(getGetChartQueryKey(), fresh);
+        queryClient.invalidateQueries({ queryKey: getGetChartQueryKey() });
+      },
+      onError: (err) => {
+        toast({
+          title: "Refresh failed",
+          description: err instanceof Error ? err.message : "Could not reach FRED",
+          variant: "destructive",
+        });
       },
     });
-  }, [refreshMutation, toast]);
+  }, [refreshMutation, queryClient, toast]);
 
   const toggleOverlay = useCallback((id: keyof Overlays) => {
     setPersisted((prev) => {
@@ -83,8 +93,9 @@ export default function ChartPage() {
     }
   }, [setPersisted]);
 
-  const payload = refreshMutation.data ?? chartData;
+  const payload = chartData;
   const composite = payload?.composite ?? [];
+  const noData = !isLoading && !payload;
   const recessions = payload?.recessions ?? [];
   const lastUpdated = payload?.lastUpdated ?? null;
 
@@ -239,7 +250,18 @@ export default function ChartPage() {
               style={{ borderTopColor: "hsl(224 100% 58%)", borderRightColor: "hsl(224 100% 58% / 0.3)" }}
             />
             <span style={{ color: "hsl(220 10% 40%)", fontFamily: "'JetBrains Mono', monospace", fontSize: "12px" }}>
-              Fetching market data…
+              Loading from database…
+            </span>
+          </div>
+        )}
+
+        {noData && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 px-4 text-center">
+            <span style={{ color: "rgba(220,225,235,0.85)", fontFamily: "'Inter', sans-serif", fontSize: "14px" }}>
+              {isError ? "No data in the database yet." : "No data."}
+            </span>
+            <span style={{ color: "rgba(200,200,220,0.5)", fontFamily: "'JetBrains Mono', monospace", fontSize: "11px" }}>
+              Click Refresh to load fresh data from FRED.
             </span>
           </div>
         )}
