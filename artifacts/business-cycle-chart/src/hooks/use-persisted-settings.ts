@@ -153,8 +153,8 @@ export function usePersistedSettings<T extends object>(
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error";
 
-const SAVED_LINGER_MS = 1500;
-const ERROR_LINGER_MS = 4000;
+const SAVED_LINGER_MS = 1000;
+const ERROR_LINGER_MS = 1000;
 
 /**
  * Convert the persisted-settings save signals into a sticky four-state label

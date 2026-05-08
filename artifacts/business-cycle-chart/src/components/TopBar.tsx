@@ -1,4 +1,4 @@
-import { useRef, type ReactElement } from "react";
+import type { ReactElement } from "react";
 import { AlertTriangle, Check, Loader2, RefreshCw } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import type { SaveStatus } from "@/hooks/use-persisted-settings";
@@ -45,37 +45,23 @@ function contentFor(status: Exclude<SaveStatus, "idle">): IndicatorContent {
  * fade-out is smooth and the slot width stays reserved.
  */
 export function SaveIndicator({ status }: { status: SaveStatus }) {
-  const lastContentRef = useRef<IndicatorContent | null>(null);
-  if (status !== "idle") {
-    lastContentRef.current = contentFor(status);
-  }
-  const content = lastContentRef.current;
-  const visible = status !== "idle";
+  if (status === "idle") return null;
+  const content = contentFor(status);
   return (
     <span
-      className="inline-flex items-center gap-1 text-xs justify-end"
+      className="inline-flex items-center gap-1 text-xs"
       style={{
-        color: content?.color ?? "transparent",
+        color: content.color,
         fontFamily: "'Inter', sans-serif",
         letterSpacing: "-0.005em",
-        transition: "opacity 220ms ease, color 220ms ease",
-        opacity: visible ? 1 : 0,
+        pointerEvents: "none",
       }}
       data-testid="save-indicator"
       data-status={status}
       aria-live="polite"
-      aria-hidden={!visible}
     >
-      {content ? (
-        <>
-          {content.icon}
-          {/* Hide the text label on tiny viewports — the icon alone still
-              gives mobile users feedback without crowding the TopBar. */}
-          <span className="hidden sm:inline" style={{ minWidth: "4.25rem" }}>
-            {content.label}
-          </span>
-        </>
-      ) : null}
+      {content.icon}
+      <span className="hidden sm:inline">{content.label}</span>
     </span>
   );
 }
