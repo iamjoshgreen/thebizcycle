@@ -65,6 +65,54 @@ function getFridays(start: Date, end: Date): Date[] {
   return fridays;
 }
 
+// Yahoo Finance chart() with bounded retries + exponential backoff + per-attempt timeout.
+// Uses the same transient-error policy as fetchWithRetry: retries network/timeout
+// errors, fast-fails on errors that look like a permanent client problem, and
+// throws a descriptive error after the final attempt.
+interface YahooChartResult {
+  quotes?: Array<{ date?: Date; close?: number | null }>;
+}
+
+async function yahooChartWithRetry(
+  symbol: string,
+  opts: { period1: string; period2: string; interval: "1wk" | "1d" | "1mo" },
+): Promise<YahooChartResult> {
+  const ATTEMPTS = 3;
+  const BASE_DELAY = 400;
+  const MAX_DELAY = 4000;
+  const TIMEOUT_MS = 20_000;
+
+  let lastErr: unknown = null;
+  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+    try {
+      const timeout = new Promise<never>((_, rej) =>
+        setTimeout(() => rej(new Error(`Yahoo ${symbol} timeout after ${TIMEOUT_MS}ms`)), TIMEOUT_MS),
+      );
+      const result = await Promise.race<YahooChartResult>([
+        yahooFinance.chart(symbol, opts) as Promise<YahooChartResult>,
+        timeout,
+      ]);
+      return result;
+    } catch (err) {
+      lastErr = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      // Permanent-looking client errors: bad symbol / 404 / validation. Don't retry.
+      if (/Not Found|404|invalid|symbol/i.test(msg) && !/timeout|ECONN|ETIMEDOUT|network|fetch/i.test(msg)) {
+        throw new Error(`Yahoo ${symbol} failed (non-transient): ${msg}`);
+      }
+      if (attempt === ATTEMPTS) break;
+      logger.warn({ symbol, attempt, err: msg }, "yahooChartWithRetry: transient error, retrying");
+      const delay = (0.5 + Math.random()) * Math.min(MAX_DELAY, BASE_DELAY * 2 ** (attempt - 1));
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  throw new Error(
+    `yahooChartWithRetry failed after ${ATTEMPTS} attempts for ${symbol}: ${
+      lastErr instanceof Error ? lastErr.message : String(lastErr)
+    }`,
+  );
+}
+
 // Fetch FRED monthly series → date string → value
 async function fetchFredMonthly(series: string, units?: string): Promise<Map<string, number>> {
   if (!FRED_KEY) throw new Error("FRED_API_KEY not set");
@@ -140,16 +188,8 @@ export async function fetchAndCompute(): Promise<ChartPayload> {
   const period2 = tomorrow.toISOString().slice(0, 10);
 
   const [spxResult, btcResult] = await Promise.all([
-    yahooFinance.chart("^GSPC", {
-      period1: "1959-01-01",
-      period2,
-      interval: "1wk",
-    }),
-    yahooFinance.chart("BTC-USD", {
-      period1: "2010-01-01",
-      period2,
-      interval: "1wk",
-    }),
+    yahooChartWithRetry("^GSPC", { period1: "1959-01-01", period2, interval: "1wk" }),
+    yahooChartWithRetry("BTC-USD", { period1: "2010-01-01", period2, interval: "1wk" }),
   ]);
 
   // Anchor each Yahoo weekly bar (dated by its Monday) to that week's
