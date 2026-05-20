@@ -46,6 +46,11 @@ export interface GliPayload {
   statusBlurb: string;
   components: GliComponent[];
   history: GliPoint[];
+  normalizedHistory: GliPoint[];
+  normalizedSmaHistory: GliPoint[];
+  fxNeutralHistory: GliPoint[];
+  anchorTime: number | null;
+  asiaDataThrough: number | null;
   rocAnn13wHistory: GliPoint[];
   rocAnn26wHistory: GliPoint[];
   btcHistory: GliPoint[];
@@ -407,10 +412,13 @@ export async function fetchGliPayload(): Promise<GliPayload> {
   const dxyFf = forwardFill(dxy, fridays);         // index
 
   // Build the GLI series + per-component USD-billion series on the grid.
+  // Also keep per-component LOCAL-currency series (for the FX-neutral overlay).
   const fedUsdB = new Map<number, number>();
   const ecbUsdB = new Map<number, number>();
   const bojUsdB = new Map<number, number>();
   const pbocUsdB = new Map<number, number>();
+  const ecbLocalB = new Map<number, number>();  // EUR billions
+  const bojLocalB = new Map<number, number>();  // JPY billions
   const gli = new Map<number, number>(); // billions USD
 
   for (const friday of fridays) {
@@ -438,20 +446,102 @@ export async function fetchGliPayload(): Promise<GliPayload> {
     //   JPNASSETS: 100M yen units → × 0.1 → $B yen → × usdPerJpy
     //   TRESEGCNM052N: millions USD → /1000 → $B (already USD-denominated)
     const fed = walclMUsd / 1000 - tga / 1000 - rrpV; // $B
-    const ecbU = (ecbMEur / 1000) * usdPerEur;        // $B
-    const bojU = bojMJpy * 0.1 * usdPerJpy;           // $B
+    const ecbLoc = ecbMEur / 1000;                    // €B
+    const bojLoc = bojMJpy * 0.1;                     // ¥B
+    const ecbU = ecbLoc * usdPerEur;                  // $B
+    const bojU = bojLoc * usdPerJpy;                  // $B
     const pbocU = pbocMUsd / 1000;                    // $B
 
     fedUsdB.set(ts, fed);
     ecbUsdB.set(ts, ecbU);
     bojUsdB.set(ts, bojU);
     pbocUsdB.set(ts, pbocU);
+    ecbLocalB.set(ts, ecbLoc);
+    bojLocalB.set(ts, bojLoc);
     gli.set(ts, fed + ecbU + bojU + pbocU);
   }
 
   const gliHistory: GliPoint[] = Array.from(gli.entries())
     .sort((a, b) => a[0] - b[0])
     .map(([time, v]) => ({ time, value: v / 1000 })); // billions → trillions
+
+  // ─── Normalized index + 90d SMA + FX-neutral overlay ─────────────────────────
+  // Anchor: first Friday on/after 2014-01-01 where every component publishes.
+  const ANCHOR_SEED = Math.floor(new Date("2014-01-01T00:00:00Z").getTime() / 1000);
+  let anchorTs: number | null = null;
+  let fedAnchor = 0, ecbUsdAnchor = 0, bojUsdAnchor = 0, pbocAnchor = 0;
+  let ecbLocAnchor = 0, bojLocAnchor = 0;
+  for (const friday of fridays) {
+    const ts = toUnix(friday);
+    if (ts < ANCHOR_SEED) continue;
+    const f = fedUsdB.get(ts);
+    const eu = ecbUsdB.get(ts);
+    const bu = bojUsdB.get(ts);
+    const p = pbocUsdB.get(ts);
+    const el = ecbLocalB.get(ts);
+    const bl = bojLocalB.get(ts);
+    if (f == null || eu == null || bu == null || p == null || el == null || bl == null) continue;
+    anchorTs = ts;
+    fedAnchor = f; ecbUsdAnchor = eu; bojUsdAnchor = bu; pbocAnchor = p;
+    ecbLocAnchor = el; bojLocAnchor = bl;
+    break;
+  }
+  const usdTotalAnchor = fedAnchor + ecbUsdAnchor + bojUsdAnchor + pbocAnchor;
+
+  // Normalized USD GLI: rebased to 100 at anchor
+  const normalizedHistory: GliPoint[] = anchorTs != null && usdTotalAnchor > 0
+    ? gliHistory.map((p) => ({ time: p.time, value: (p.value * 1000) / usdTotalAnchor * 100 }))
+    : [];
+
+  // 90-day SMA ≈ 13 weekly bars (13 × 7d = 91d)
+  function sma(series: GliPoint[], window: number): GliPoint[] {
+    const out: GliPoint[] = [];
+    if (series.length < window) return out;
+    let sum = 0;
+    for (let i = 0; i < window; i++) sum += series[i].value;
+    out.push({ time: series[window - 1].time, value: sum / window });
+    for (let i = window; i < series.length; i++) {
+      sum += series[i].value - series[i - window].value;
+      out.push({ time: series[i].time, value: sum / window });
+    }
+    return out;
+  }
+  const normalizedSmaHistory = sma(normalizedHistory, 13);
+
+  // FX-neutral: weight each component by its USD share at anchor, but index each
+  // by its LOCAL-currency value rebased to 100 at anchor. Strips dollar moves.
+  const fxNeutralHistory: GliPoint[] = [];
+  if (
+    anchorTs != null && usdTotalAnchor > 0 &&
+    fedAnchor > 0 && ecbLocAnchor > 0 && bojLocAnchor > 0 && pbocAnchor > 0
+  ) {
+    const wFed = fedAnchor / usdTotalAnchor;
+    const wEcb = ecbUsdAnchor / usdTotalAnchor;
+    const wBoj = bojUsdAnchor / usdTotalAnchor;
+    const wPboc = pbocAnchor / usdTotalAnchor;
+    for (const p of gliHistory) {
+      const t = p.time;
+      const fv = fedUsdB.get(t);
+      const el = ecbLocalB.get(t);
+      const bl = bojLocalB.get(t);
+      const pv = pbocUsdB.get(t);
+      if (fv == null || el == null || bl == null || pv == null) continue;
+      const idx =
+        wFed * (fv / fedAnchor) * 100 +
+        wEcb * (el / ecbLocAnchor) * 100 +
+        wBoj * (bl / bojLocAnchor) * 100 +
+        wPboc * (pv / pbocAnchor) * 100;
+      fxNeutralHistory.push({ time: t, value: idx });
+    }
+  }
+
+  // Asia stale-data badge: latest raw observation date for BoJ and PBoC.
+  const bojRawLatest = boj && boj.length > 0 ? boj[boj.length - 1].time : null;
+  const pbocRawLatest = pboc && pboc.length > 0 ? pboc[pboc.length - 1].time : null;
+  const asiaDataThrough =
+    bojRawLatest != null && pbocRawLatest != null
+      ? Math.min(bojRawLatest, pbocRawLatest)
+      : (bojRawLatest ?? pbocRawLatest ?? null);
 
   // 13/26-week annualized rate of change.
   function annRoc(series: GliPoint[], weeks: number): GliPoint[] {
@@ -631,6 +721,11 @@ export async function fetchGliPayload(): Promise<GliPayload> {
     statusBlurb,
     components,
     history: gliHistory,
+    normalizedHistory,
+    normalizedSmaHistory,
+    fxNeutralHistory,
+    anchorTime: anchorTs,
+    asiaDataThrough,
     rocAnn13wHistory: rocAnn13w,
     rocAnn26wHistory: rocAnn26w,
     btcHistory,

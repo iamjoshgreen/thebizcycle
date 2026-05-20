@@ -1011,6 +1011,29 @@ components:
           description: Weekly GLI level in USD trillions
           items:
             $ref: "#/components/schemas/GliPoint"
+        normalizedHistory:
+          type: array
+          description: Weekly GLI rebased to 100 at the anchor date (Jan 2014)
+          items:
+            $ref: "#/components/schemas/GliPoint"
+        normalizedSmaHistory:
+          type: array
+          description: 90-day (≈13-week) simple moving average of normalizedHistory
+          items:
+            $ref: "#/components/schemas/GliPoint"
+        fxNeutralHistory:
+          type: array
+          description: FX-neutral composite — each component indexed in its own local currency, weighted by USD share at the anchor date
+          items:
+            $ref: "#/components/schemas/GliPoint"
+        anchorTime:
+          type: number
+          nullable: true
+          description: Unix seconds of the Friday used as the index anchor (where normalized = 100)
+        asiaDataThrough:
+          type: number
+          nullable: true
+          description: Latest raw observation date (unix seconds) shared by BoJ and PBoC — i.e. how stale the slowest Asia component is
         rocAnn13wHistory:
           type: array
           items:
@@ -1073,6 +1096,11 @@ components:
         - statusBlurb
         - components
         - history
+        - normalizedHistory
+        - normalizedSmaHistory
+        - fxNeutralHistory
+        - anchorTime
+        - asiaDataThrough
         - rocAnn13wHistory
         - rocAnn26wHistory
         - btcHistory

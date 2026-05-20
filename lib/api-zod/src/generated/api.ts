@@ -878,6 +878,44 @@ export const GetGliResponse = zod.object({
       }),
     )
     .describe("Weekly GLI level in USD trillions"),
+  normalizedHistory: zod
+    .array(
+      zod.object({
+        time: zod.number().describe("Unix seconds, Friday weekly grid UTC"),
+        value: zod.number(),
+      }),
+    )
+    .describe("Weekly GLI rebased to 100 at the anchor date (Jan 2014)"),
+  normalizedSmaHistory: zod
+    .array(
+      zod.object({
+        time: zod.number().describe("Unix seconds, Friday weekly grid UTC"),
+        value: zod.number(),
+      }),
+    )
+    .describe("90-day (≈13-week) simple moving average of normalizedHistory"),
+  fxNeutralHistory: zod
+    .array(
+      zod.object({
+        time: zod.number().describe("Unix seconds, Friday weekly grid UTC"),
+        value: zod.number(),
+      }),
+    )
+    .describe(
+      "FX-neutral composite — each component indexed in its own local currency, weighted by USD share at the anchor date",
+    ),
+  anchorTime: zod
+    .number()
+    .nullable()
+    .describe(
+      "Unix seconds of the Friday used as the index anchor (where normalized = 100)",
+    ),
+  asiaDataThrough: zod
+    .number()
+    .nullable()
+    .describe(
+      "Latest raw observation date (unix seconds) shared by BoJ and PBoC — i.e. how stale the slowest Asia component is",
+    ),
   rocAnn13wHistory: zod.array(
     zod.object({
       time: zod.number().describe("Unix seconds, Friday weekly grid UTC"),
@@ -981,6 +1019,44 @@ export const RefreshGliResponse = zod.object({
       }),
     )
     .describe("Weekly GLI level in USD trillions"),
+  normalizedHistory: zod
+    .array(
+      zod.object({
+        time: zod.number().describe("Unix seconds, Friday weekly grid UTC"),
+        value: zod.number(),
+      }),
+    )
+    .describe("Weekly GLI rebased to 100 at the anchor date (Jan 2014)"),
+  normalizedSmaHistory: zod
+    .array(
+      zod.object({
+        time: zod.number().describe("Unix seconds, Friday weekly grid UTC"),
+        value: zod.number(),
+      }),
+    )
+    .describe("90-day (≈13-week) simple moving average of normalizedHistory"),
+  fxNeutralHistory: zod
+    .array(
+      zod.object({
+        time: zod.number().describe("Unix seconds, Friday weekly grid UTC"),
+        value: zod.number(),
+      }),
+    )
+    .describe(
+      "FX-neutral composite — each component indexed in its own local currency, weighted by USD share at the anchor date",
+    ),
+  anchorTime: zod
+    .number()
+    .nullable()
+    .describe(
+      "Unix seconds of the Friday used as the index anchor (where normalized = 100)",
+    ),
+  asiaDataThrough: zod
+    .number()
+    .nullable()
+    .describe(
+      "Latest raw observation date (unix seconds) shared by BoJ and PBoC — i.e. how stale the slowest Asia component is",
+    ),
   rocAnn13wHistory: zod.array(
     zod.object({
       time: zod.number().describe("Unix seconds, Friday weekly grid UTC"),

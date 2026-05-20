@@ -176,24 +176,32 @@ function ComponentRow({ c }: { c: GliComponent }) {
   );
 }
 
-// ─── Main chart: GLI (lagged) overlaid on BTC + SPX ───────────────────────────
+// ─── Main chart: normalized GLI + 90d SMA, lagged, vs BTC (log) ──────────────
+
+const LAG_DAYS = 75;
 
 interface MainChartProps {
-  gli: GliPoint[];
+  normalized: GliPoint[];
+  normalizedSma: GliPoint[];
+  fxNeutral: GliPoint[];
   btc: GliPoint[];
-  spx: GliPoint[];
   recessions: NberRecessionInterval[];
-  lagDays: number;
-  showBtc: boolean;
-  showSpx: boolean;
+  showFxNeutral: boolean;
   width?: number;
   height?: number;
 }
 
-function MainChart({ gli, btc, spx, recessions, lagDays, showBtc, showSpx, width = 1180, height = 380 }: MainChartProps) {
-  const btcVisible = showBtc ? btc : [];
-  const spxVisible = showSpx ? spx : [];
-  if (gli.length < 2) {
+function MainChart({
+  normalized,
+  normalizedSma,
+  fxNeutral,
+  btc,
+  recessions,
+  showFxNeutral,
+  width = 1180,
+  height = 440,
+}: MainChartProps) {
+  if (normalized.length < 2 || btc.length < 2) {
     return (
       <div
         style={{
@@ -206,83 +214,96 @@ function MainChart({ gli, btc, spx, recessions, lagDays, showBtc, showSpx, width
           fontSize: 12,
         }}
       >
-        no GLI history
+        no data
       </div>
     );
   }
 
   const padL = 64;
-  const padR = 64;
+  const padR = 72;
   const padT = 20;
-  const padB = 28;
+  const padB = 32;
   const innerW = width - padL - padR;
   const innerH = height - padT - padB;
 
-  const lagSec = lagDays * 24 * 3600;
-  const gliShifted = gli.map((p) => ({ time: p.time + lagSec, value: p.value }));
+  const lagSec = LAG_DAYS * 24 * 3600;
+  const shift = (s: GliPoint[]) => s.map((p) => ({ time: p.time + lagSec, value: p.value }));
+  const gliShifted = shift(normalized);
+  const smaShifted = shift(normalizedSma);
+  const fxShifted = showFxNeutral ? shift(fxNeutral) : [];
 
-  // X domain: union of visible price series
-  const allTimes = [
-    gliShifted[0].time,
-    gliShifted[gliShifted.length - 1].time,
-    ...(btcVisible.length > 0 ? [btcVisible[0].time, btcVisible[btcVisible.length - 1].time] : []),
-    ...(spxVisible.length > 0 ? [spxVisible[0].time, spxVisible[spxVisible.length - 1].time] : []),
-  ];
-  const t0 = Math.min(...allTimes);
-  const t1 = Math.max(...allTimes);
+  // X domain: from earliest BTC point to (today + 75d) so the shifted GLI
+  // reaches into the future per spec.
+  const todayPlusLagSec = Math.floor(Date.now() / 1000) + lagSec;
+  const t0 = btc[0].time;
+  const t1 = todayPlusLagSec;
   const span = Math.max(1, t1 - t0);
   const x = (t: number) => padL + ((t - t0) / span) * innerW;
 
-  // Left axis: GLI ($T). Right axis: BTC + SPX normalized to [0,1] each then plotted in log shape.
-  const gliVals = gliShifted.map((p) => p.value);
-  const gliMin = Math.min(...gliVals);
-  const gliMax = Math.max(...gliVals);
-  const gliPad = (gliMax - gliMin) * 0.08;
-  const gMin = gliMin - gliPad;
-  const gMax = gliMax + gliPad;
-  const yGli = (v: number) =>
-    padT + (1 - (v - gMin) / Math.max(0.0001, gMax - gMin)) * innerH;
+  // Left axis (linear, normalized index). Take min/max across whatever lines
+  // fall inside the visible x window.
+  const inWindow = (p: GliPoint) => p.time >= t0 && p.time <= t1;
+  const leftPool = [
+    ...gliShifted.filter(inWindow).map((p) => p.value),
+    ...smaShifted.filter(inWindow).map((p) => p.value),
+    ...fxShifted.filter(inWindow).map((p) => p.value),
+  ];
+  const lMin = Math.min(...leftPool);
+  const lMax = Math.max(...leftPool);
+  const lPad = (lMax - lMin) * 0.08;
+  const lMinP = lMin - lPad;
+  const lMaxP = lMax + lPad;
+  const yLeft = (v: number) =>
+    padT + (1 - (v - lMinP) / Math.max(0.0001, lMaxP - lMinP)) * innerH;
 
-  // BTC: log scale. SPX: log scale. Normalize each to [padT, padT+innerH].
-  function logNorm(series: GliPoint[]): (v: number) => number {
-    if (series.length === 0) return () => padT;
-    const vals = series.map((p) => Math.log(Math.max(0.0001, p.value)));
-    const mn = Math.min(...vals);
-    const mx = Math.max(...vals);
-    return (raw: number) => {
-      const lv = Math.log(Math.max(0.0001, raw));
-      return padT + (1 - (lv - mn) / Math.max(0.0001, mx - mn)) * innerH;
-    };
-  }
-  const yBtc = logNorm(btcVisible);
-  const ySpx = logNorm(spxVisible);
+  // Right axis: BTC, log scale, using only points inside the window.
+  const btcWin = btc.filter(inWindow);
+  const btcLog = btcWin.map((p) => Math.log(Math.max(0.0001, p.value)));
+  const rMin = Math.min(...btcLog);
+  const rMax = Math.max(...btcLog);
+  const rPad = (rMax - rMin) * 0.06;
+  const rMinP = rMin - rPad;
+  const rMaxP = rMax + rPad;
+  const yRight = (raw: number) => {
+    const lv = Math.log(Math.max(0.0001, raw));
+    return padT + (1 - (lv - rMinP) / Math.max(0.0001, rMaxP - rMinP)) * innerH;
+  };
 
-  function pathFor(series: GliPoint[], yFn: (v: number) => number): string {
+  function path(series: GliPoint[], yFn: (v: number) => number): string {
     return series
-      .filter((p) => p.time >= t0 && p.time <= t1)
+      .filter(inWindow)
       .map((p, i) => `${i === 0 ? "M" : "L"}${x(p.time).toFixed(1)},${yFn(p.value).toFixed(1)}`)
       .join(" ");
   }
 
-  const gliPath = pathFor(gliShifted, yGli);
-  const btcPath = pathFor(btcVisible, yBtc);
-  const spxPath = pathFor(spxVisible, ySpx);
+  const gliPath = path(gliShifted, yLeft);
+  const smaPath = path(smaShifted, yLeft);
+  const fxPath = path(fxShifted, yLeft);
+  const btcPath = path(btcWin, yRight);
 
-  // Y-axis ticks for GLI
-  const yTicks: number[] = [];
-  const step = (gMax - gMin) / 5;
-  for (let i = 0; i <= 5; i++) yTicks.push(gMin + step * i);
+  // Left ticks (5 evenly spaced)
+  const leftTicks: number[] = [];
+  for (let i = 0; i <= 5; i++) leftTicks.push(lMinP + ((lMaxP - lMinP) * i) / 5);
+
+  // Right ticks: nice round BTC price levels (log scale)
+  const btcLevels = [100, 300, 1_000, 3_000, 10_000, 30_000, 100_000, 300_000].filter(
+    (v) => v >= Math.exp(rMinP) * 0.9 && v <= Math.exp(rMaxP) * 1.1,
+  );
 
   // Year ticks
   const startYear = new Date(t0 * 1000).getUTCFullYear();
   const endYear = new Date(t1 * 1000).getUTCFullYear();
-  const yearStep = endYear - startYear > 18 ? 4 : endYear - startYear > 9 ? 2 : 1;
+  const yearStep = endYear - startYear > 18 ? 2 : 1;
   const yearTicks: number[] = [];
   for (let y = Math.ceil(startYear / yearStep) * yearStep; y <= endYear; y += yearStep) {
     yearTicks.push(y);
   }
   const tickX = (year: number) =>
     x(Math.floor(new Date(`${year}-01-01T00:00:00Z`).getTime() / 1000));
+
+  // "Now" vertical line at today (before the +75d projection)
+  const nowSec = Math.floor(Date.now() / 1000);
+  const nowX = x(nowSec);
 
   return (
     <svg
@@ -310,71 +331,146 @@ function MainChart({ gli, btc, spx, recessions, lagDays, showBtc, showSpx, width
         );
       })}
 
-      {/* Y grid (GLI scale) */}
-      {yTicks.map((v, i) => (
-        <g key={i}>
+      {/* Left axis grid + labels (normalized index) */}
+      {leftTicks.map((v, i) => (
+        <g key={`l${i}`}>
           <line
             x1={padL}
             x2={width - padR}
-            y1={yGli(v)}
-            y2={yGli(v)}
-            stroke="rgba(180,180,200,0.08)"
+            y1={yLeft(v)}
+            y2={yLeft(v)}
+            stroke="rgba(180,180,200,0.06)"
             strokeWidth={0.75}
             strokeDasharray="2 4"
           />
           <text
             x={padL - 8}
-            y={yGli(v) + 3}
+            y={yLeft(v) + 3}
             textAnchor="end"
             fontSize={10}
             fontFamily="'JetBrains Mono', monospace"
-            fill="rgba(140,180,200,0.65)"
+            fill="rgba(220,225,235,0.65)"
           >
-            ${v.toFixed(1)}T
+            {v.toFixed(0)}
           </text>
         </g>
       ))}
 
-      {/* X axis ticks */}
+      {/* Right axis labels (BTC log) */}
+      {btcLevels.map((v) => (
+        <g key={`r${v}`}>
+          <line
+            x1={padL}
+            x2={width - padR}
+            y1={yRight(v)}
+            y2={yRight(v)}
+            stroke="rgba(247,147,26,0.05)"
+            strokeWidth={0.5}
+          />
+          <text
+            x={width - padR + 6}
+            y={yRight(v) + 3}
+            textAnchor="start"
+            fontSize={10}
+            fontFamily="'JetBrains Mono', monospace"
+            fill="rgba(247,147,26,0.7)"
+          >
+            {v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : v}
+          </text>
+        </g>
+      ))}
+
+      {/* X axis year ticks */}
       {yearTicks.map((yr) => (
         <text
           key={yr}
           x={tickX(yr)}
-          y={height - 8}
+          y={height - 10}
           textAnchor="middle"
           fontSize={10}
           fontFamily="'JetBrains Mono', monospace"
-          fill="rgba(180,180,200,0.5)"
+          fill="rgba(180,180,200,0.55)"
         >
           {yr}
         </text>
       ))}
 
-      {/* SPX path */}
-      {spxVisible.length > 1 && (
-        <path d={spxPath} fill="none" stroke="rgba(180,180,200,0.45)" strokeWidth={1.2} />
+      {/* "Now" marker — separates observed from +75d projection */}
+      {nowX > padL && nowX < width - padR && (
+        <g>
+          <line
+            x1={nowX}
+            x2={nowX}
+            y1={padT}
+            y2={padT + innerH}
+            stroke="rgba(220,225,235,0.25)"
+            strokeWidth={0.75}
+            strokeDasharray="3 3"
+          />
+          <text
+            x={nowX + 4}
+            y={padT + 12}
+            fontSize={9}
+            fontFamily="'JetBrains Mono', monospace"
+            fill="rgba(220,225,235,0.45)"
+          >
+            today
+          </text>
+        </g>
       )}
 
-      {/* BTC path */}
-      {btcVisible.length > 1 && (
-        <path d={btcPath} fill="none" stroke="rgba(247,147,26,0.85)" strokeWidth={1.4} />
+      {/* BTC (orange, log scale, right axis) — drawn first so GLI sits on top */}
+      <path d={btcPath} fill="none" stroke="rgba(247,147,26,0.85)" strokeWidth={1.3} />
+
+      {/* FX-neutral overlay (cyan dashed) when toggled */}
+      {showFxNeutral && fxShifted.length > 1 && (
+        <path
+          d={fxPath}
+          fill="none"
+          stroke="hsl(180 80% 65%)"
+          strokeWidth={1.4}
+          strokeDasharray="4 3"
+          opacity={0.85}
+        />
       )}
 
-      {/* GLI path (lagged) */}
-      <path d={gliPath} fill="none" stroke="hsl(195 90% 65%)" strokeWidth={2} />
+      {/* GLI (thin white) */}
+      <path
+        d={gliPath}
+        fill="none"
+        stroke="rgba(245,245,250,0.85)"
+        strokeWidth={1}
+      />
 
-      {/* Right axis label */}
-      {(showBtc || showSpx) && (
-        <text
-          x={width - padR + 8}
-          y={padT + 12}
-          fontSize={10}
-          fontFamily="'JetBrains Mono', monospace"
-          fill="rgba(247,147,26,0.85)"
-        >
-          {showBtc && showSpx ? "BTC / SPX (log)" : showBtc ? "BTC (log)" : "SPX (log)"}
-        </text>
-      )}
+      {/* 90d SMA (yellow, smoother + thicker) */}
+      <path
+        d={smaPath}
+        fill="none"
+        stroke="hsl(48 95% 60%)"
+        strokeWidth={2}
+      />
+
+      {/* Axis labels */}
+      <text
+        x={padL - 8}
+        y={padT - 6}
+        textAnchor="end"
+        fontSize={9}
+        fontFamily="'JetBrains Mono', monospace"
+        fill="rgba(220,225,235,0.6)"
+      >
+        GLI index (100 = Jan 2014)
+      </text>
+      <text
+        x={width - padR + 6}
+        y={padT - 6}
+        textAnchor="start"
+        fontSize={9}
+        fontFamily="'JetBrains Mono', monospace"
+        fill="rgba(247,147,26,0.85)"
+      >
+        BTC/USD (log)
+      </text>
     </svg>
   );
 }
@@ -451,9 +547,7 @@ export default function GliPage() {
   const payload = data as GliPayload | undefined;
   const noData = !isLoading && !payload;
 
-  const [lagDays, setLagDays] = useState<number>(payload?.defaultLagDays ?? 75);
-  const [showBtc, setShowBtc] = useState<boolean>(true);
-  const [showSpx, setShowSpx] = useState<boolean>(true);
+  const [showFxNeutral, setShowFxNeutral] = useState<boolean>(false);
 
   const onRefresh = useCallback(async () => {
     try {
@@ -474,8 +568,6 @@ export default function GliPage() {
     const status = payload?.status ?? "insufficient";
     return STATUS_COLORS[status] ?? STATUS_COLORS.insufficient;
   }, [payload?.status]);
-
-  const lagPresets = payload?.lagPresets?.length ? payload.lagPresets : [56, 60, 75];
 
   return (
     <div
@@ -665,6 +757,32 @@ export default function GliPage() {
                   MoM {fmtPct(payload.mom4wPct)} · YoY {fmtPct(payload.yoyPct)} ·
                   13w ann {fmtPct(payload.roc13wAnnPct)}
                 </div>
+                {payload.asiaDataThrough != null && (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      padding: "2px 8px",
+                      borderRadius: 4,
+                      background: "hsl(35 30% 10% / 0.5)",
+                      border: "1px solid rgba(245,158,11,0.3)",
+                      color: "rgba(255,210,140,0.85)",
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: 10,
+                      letterSpacing: "0.05em",
+                    }}
+                    title="BoJ and PBoC publish monthly. Their values are carried forward from this date to the latest Friday grid point."
+                    data-testid="gli-asia-stale"
+                  >
+                    Asia data through{" "}
+                    {new Date(payload.asiaDataThrough * 1000).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -714,174 +832,115 @@ export default function GliPage() {
                   fontFamily: "'Inter', sans-serif",
                 }}
               >
-                GLI (shifted +{lagDays}d) vs BTC + S&P 500
+                Bitcoin and the GLI (not Global M2) ·{" "}
+                <span style={{ fontWeight: 500, color: "rgba(220,225,235,0.7)" }}>
+                  Bitcoin usually follows with a ~75-day lag
+                </span>
               </div>
               <div
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  gap: 12,
+                  gap: 14,
                   fontSize: 11,
                   color: "rgba(180,180,200,0.65)",
                   fontFamily: "'JetBrains Mono', monospace",
                   flexWrap: "wrap",
                 }}
               >
-                <span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <span
+                    style={{
+                      display: "inline-block",
+                      width: 14,
+                      height: 1.5,
+                      background: "rgba(245,245,250,0.85)",
+                    }}
+                  />
+                  GLI (norm.)
+                </span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                   <span
                     style={{
                       display: "inline-block",
                       width: 14,
                       height: 2,
-                      background: "hsl(195 90% 65%)",
-                      marginRight: 6,
-                      verticalAlign: "middle",
+                      background: "hsl(48 95% 60%)",
                     }}
                   />
-                  GLI (left)
+                  90d SMA
+                </span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  <span
+                    style={{
+                      display: "inline-block",
+                      width: 14,
+                      height: 2,
+                      background: "rgba(247,147,26,0.85)",
+                    }}
+                  />
+                  BTC (log, right)
                 </span>
                 <button
                   type="button"
-                  onClick={() => setShowBtc((v) => !v)}
-                  data-testid="gli-toggle-btc"
-                  title={showBtc ? "Hide BTC" : "Show BTC"}
+                  onClick={() => setShowFxNeutral((v) => !v)}
+                  data-testid="gli-toggle-fxneutral"
+                  title={
+                    showFxNeutral
+                      ? "Hide FX-neutral composite"
+                      : "Show FX-neutral composite (strips dollar moves)"
+                  }
                   style={{
-                    background: "transparent",
-                    border: "none",
-                    padding: "2px 4px",
+                    background: showFxNeutral ? "hsl(180 30% 12% / 0.6)" : "transparent",
+                    border: `1px solid ${
+                      showFxNeutral ? "hsl(180 50% 30%)" : "hsl(230 10% 18%)"
+                    }`,
+                    padding: "3px 8px",
+                    borderRadius: 6,
                     cursor: "pointer",
-                    color: showBtc
-                      ? "rgba(247,147,26,0.95)"
-                      : "rgba(247,147,26,0.4)",
+                    color: showFxNeutral
+                      ? "hsl(180 80% 75%)"
+                      : "rgba(180,180,200,0.55)",
                     fontFamily: "'JetBrains Mono', monospace",
                     fontSize: 11,
-                    textDecoration: showBtc ? "none" : "line-through",
                   }}
                 >
                   <span
                     style={{
                       display: "inline-block",
-                      width: 14,
+                      width: 12,
                       height: 2,
-                      background: showBtc
-                        ? "rgba(247,147,26,0.85)"
-                        : "rgba(247,147,26,0.35)",
+                      background: showFxNeutral ? "hsl(180 80% 65%)" : "rgba(180,180,200,0.4)",
                       marginRight: 6,
                       verticalAlign: "middle",
                     }}
                   />
-                  BTC (right, log)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowSpx((v) => !v)}
-                  data-testid="gli-toggle-spx"
-                  title={showSpx ? "Hide S&P 500" : "Show S&P 500"}
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    padding: "2px 4px",
-                    cursor: "pointer",
-                    color: showSpx
-                      ? "rgba(220,225,235,0.85)"
-                      : "rgba(180,180,200,0.4)",
-                    fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: 11,
-                    textDecoration: showSpx ? "none" : "line-through",
-                  }}
-                >
-                  <span
-                    style={{
-                      display: "inline-block",
-                      width: 14,
-                      height: 2,
-                      background: showSpx
-                        ? "rgba(180,180,200,0.45)"
-                        : "rgba(180,180,200,0.2)",
-                      marginRight: 6,
-                      verticalAlign: "middle",
-                    }}
-                  />
-                  S&P 500 (right, log)
+                  FX-neutral
                 </button>
               </div>
             </div>
 
+            <MainChart
+              normalized={payload.normalizedHistory}
+              normalizedSma={payload.normalizedSmaHistory}
+              fxNeutral={payload.fxNeutralHistory}
+              btc={payload.btcHistory}
+              recessions={payload.nberRecessions}
+              showFxNeutral={showFxNeutral}
+            />
             <div
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                flexWrap: "wrap",
+                fontSize: 11,
+                color: "rgba(180,180,200,0.55)",
+                fontFamily: "'JetBrains Mono', monospace",
+                lineHeight: 1.5,
               }}
             >
-              <span
-                style={{
-                  fontSize: 10,
-                  letterSpacing: "0.08em",
-                  textTransform: "uppercase",
-                  color: "rgba(180,180,200,0.55)",
-                  fontFamily: "'JetBrains Mono', monospace",
-                }}
-              >
-                Lag
-              </span>
-              {lagPresets.map((p) => {
-                const active = p === lagDays;
-                return (
-                  <button
-                    key={p}
-                    onClick={() => setLagDays(p)}
-                    data-testid={`gli-lag-${p}`}
-                    style={{
-                      padding: "4px 10px",
-                      borderRadius: 6,
-                      background: active
-                        ? "hsl(195 60% 18% / 0.6)"
-                        : "hsl(230 12% 12%)",
-                      color: active ? "hsl(195 90% 75%)" : "rgba(220,225,235,0.7)",
-                      border: `1px solid ${
-                        active ? "hsl(195 60% 35%)" : "hsl(230 10% 18%)"
-                      }`,
-                      fontFamily: "'JetBrains Mono', monospace",
-                      fontSize: 11,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {p}d
-                  </button>
-                );
-              })}
-              <input
-                type="range"
-                min={0}
-                max={180}
-                step={1}
-                value={lagDays}
-                onChange={(e) => setLagDays(Number(e.target.value))}
-                style={{ flex: 1, minWidth: 160, maxWidth: 360, accentColor: "hsl(195 90% 65%)" }}
-                data-testid="gli-lag-slider"
-              />
-              <span
-                style={{
-                  fontSize: 11,
-                  color: "rgba(180,180,200,0.55)",
-                  fontFamily: "'JetBrains Mono', monospace",
-                }}
-              >
-                {lagDays} days
-              </span>
+              GLI rebased to 100 at the first Friday of 2014, shifted forward 75
+              days so it aligns with the price tape BTC tends to trade into.
+              {showFxNeutral &&
+                " Cyan = FX-neutral composite (components indexed in local currency, weighted by USD share at anchor — strips dollar moves)."}
             </div>
-
-            <MainChart
-              gli={payload.history}
-              btc={payload.btcHistory}
-              spx={payload.spxHistory}
-              recessions={payload.nberRecessions}
-              lagDays={lagDays}
-              showBtc={showBtc}
-              showSpx={showSpx}
-            />
           </section>
 
           {/* Components table */}

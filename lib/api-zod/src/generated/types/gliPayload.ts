@@ -26,6 +26,16 @@ export interface GliPayload {
   components: GliComponent[];
   /** Weekly GLI level in USD trillions */
   history: GliPoint[];
+  /** Weekly GLI rebased to 100 at the anchor date (Jan 2014) */
+  normalizedHistory: GliPoint[];
+  /** 90-day (≈13-week) simple moving average of normalizedHistory */
+  normalizedSmaHistory: GliPoint[];
+  /** FX-neutral composite — each component indexed in its own local currency, weighted by USD share at the anchor date */
+  fxNeutralHistory: GliPoint[];
+  /** Unix seconds of the Friday used as the index anchor (where normalized = 100) */
+  anchorTime: number | null;
+  /** Latest raw observation date (unix seconds) shared by BoJ and PBoC — i.e. how stale the slowest Asia component is */
+  asiaDataThrough: number | null;
   rocAnn13wHistory: GliPoint[];
   rocAnn26wHistory: GliPoint[];
   /** Weekly BTC-USD close */
