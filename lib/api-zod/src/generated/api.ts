@@ -829,3 +829,210 @@ export const RefreshCyclicalResponse = zod.object({
   notes: zod.array(zod.string()),
   lastUpdated: zod.number(),
 });
+
+/**
+ * Pure database SELECT. Returns 404 if no row has ever been written for this indicator.
+ * @summary Get Global Liquidity Index payload from the database
+ */
+export const GetGliResponse = zod.object({
+  latestTime: zod.number().nullable(),
+  latestGliUsdT: zod
+    .number()
+    .nullable()
+    .describe("Latest Global Liquidity Index in trillions of USD"),
+  mom4wPct: zod.number().nullable().describe("4-week % change in GLI"),
+  yoyPct: zod.number().nullable(),
+  roc13wAnnPct: zod
+    .number()
+    .nullable()
+    .describe("Latest 13-week annualized rate of change (%)"),
+  roc26wAnnPct: zod.number().nullable(),
+  status: zod.enum(["expanding", "stalling", "contracting", "insufficient"]),
+  statusLabel: zod.string(),
+  statusBlurb: zod.string(),
+  components: zod.array(
+    zod.object({
+      id: zod.enum(["fed", "ecb", "boj", "boe", "pboc"]),
+      label: zod.string(),
+      series: zod.string(),
+      available: zod.boolean(),
+      latestUsdTrillions: zod.number().nullable(),
+      mom4wPct: zod
+        .number()
+        .nullable()
+        .describe("4-week % change in USD terms"),
+      weeklyContributionUsdB: zod
+        .number()
+        .nullable()
+        .describe(
+          "Contribution to the latest weekly GLI delta in billions USD",
+        ),
+      note: zod.string().nullable(),
+    }),
+  ),
+  history: zod
+    .array(
+      zod.object({
+        time: zod.number().describe("Unix seconds, Friday weekly grid UTC"),
+        value: zod.number(),
+      }),
+    )
+    .describe("Weekly GLI level in USD trillions"),
+  rocAnn13wHistory: zod.array(
+    zod.object({
+      time: zod.number().describe("Unix seconds, Friday weekly grid UTC"),
+      value: zod.number(),
+    }),
+  ),
+  rocAnn26wHistory: zod.array(
+    zod.object({
+      time: zod.number().describe("Unix seconds, Friday weekly grid UTC"),
+      value: zod.number(),
+    }),
+  ),
+  btcHistory: zod
+    .array(
+      zod.object({
+        time: zod.number().describe("Unix seconds, Friday weekly grid UTC"),
+        value: zod.number(),
+      }),
+    )
+    .describe("Weekly BTC-USD close"),
+  spxHistory: zod
+    .array(
+      zod.object({
+        time: zod.number().describe("Unix seconds, Friday weekly grid UTC"),
+        value: zod.number(),
+      }),
+    )
+    .describe("Weekly S&P 500 close"),
+  dxyHistory: zod
+    .array(
+      zod.object({
+        time: zod.number().describe("Unix seconds, Friday weekly grid UTC"),
+        value: zod.number(),
+      }),
+    )
+    .describe("Weekly DXY (broad nominal USD index) level"),
+  dxyLatest: zod.number().nullable(),
+  dxyChange13wPct: zod.number().nullable(),
+  dxyBlurb: zod.string(),
+  nberRecessions: zod.array(
+    zod.object({
+      start: zod.number(),
+      end: zod.number(),
+    }),
+  ),
+  defaultLagDays: zod
+    .number()
+    .describe(
+      "Default lag (days) to shift GLI forward when overlaying on BTC\/SPX",
+    ),
+  lagPresets: zod.array(zod.number()),
+  partialData: zod.boolean(),
+  notes: zod.array(zod.string()),
+  lastUpdated: zod.number(),
+});
+
+/**
+ * @summary Force refresh Global Liquidity Index data
+ */
+export const RefreshGliResponse = zod.object({
+  latestTime: zod.number().nullable(),
+  latestGliUsdT: zod
+    .number()
+    .nullable()
+    .describe("Latest Global Liquidity Index in trillions of USD"),
+  mom4wPct: zod.number().nullable().describe("4-week % change in GLI"),
+  yoyPct: zod.number().nullable(),
+  roc13wAnnPct: zod
+    .number()
+    .nullable()
+    .describe("Latest 13-week annualized rate of change (%)"),
+  roc26wAnnPct: zod.number().nullable(),
+  status: zod.enum(["expanding", "stalling", "contracting", "insufficient"]),
+  statusLabel: zod.string(),
+  statusBlurb: zod.string(),
+  components: zod.array(
+    zod.object({
+      id: zod.enum(["fed", "ecb", "boj", "boe", "pboc"]),
+      label: zod.string(),
+      series: zod.string(),
+      available: zod.boolean(),
+      latestUsdTrillions: zod.number().nullable(),
+      mom4wPct: zod
+        .number()
+        .nullable()
+        .describe("4-week % change in USD terms"),
+      weeklyContributionUsdB: zod
+        .number()
+        .nullable()
+        .describe(
+          "Contribution to the latest weekly GLI delta in billions USD",
+        ),
+      note: zod.string().nullable(),
+    }),
+  ),
+  history: zod
+    .array(
+      zod.object({
+        time: zod.number().describe("Unix seconds, Friday weekly grid UTC"),
+        value: zod.number(),
+      }),
+    )
+    .describe("Weekly GLI level in USD trillions"),
+  rocAnn13wHistory: zod.array(
+    zod.object({
+      time: zod.number().describe("Unix seconds, Friday weekly grid UTC"),
+      value: zod.number(),
+    }),
+  ),
+  rocAnn26wHistory: zod.array(
+    zod.object({
+      time: zod.number().describe("Unix seconds, Friday weekly grid UTC"),
+      value: zod.number(),
+    }),
+  ),
+  btcHistory: zod
+    .array(
+      zod.object({
+        time: zod.number().describe("Unix seconds, Friday weekly grid UTC"),
+        value: zod.number(),
+      }),
+    )
+    .describe("Weekly BTC-USD close"),
+  spxHistory: zod
+    .array(
+      zod.object({
+        time: zod.number().describe("Unix seconds, Friday weekly grid UTC"),
+        value: zod.number(),
+      }),
+    )
+    .describe("Weekly S&P 500 close"),
+  dxyHistory: zod
+    .array(
+      zod.object({
+        time: zod.number().describe("Unix seconds, Friday weekly grid UTC"),
+        value: zod.number(),
+      }),
+    )
+    .describe("Weekly DXY (broad nominal USD index) level"),
+  dxyLatest: zod.number().nullable(),
+  dxyChange13wPct: zod.number().nullable(),
+  dxyBlurb: zod.string(),
+  nberRecessions: zod.array(
+    zod.object({
+      start: zod.number(),
+      end: zod.number(),
+    }),
+  ),
+  defaultLagDays: zod
+    .number()
+    .describe(
+      "Default lag (days) to shift GLI forward when overlaying on BTC\/SPX",
+    ),
+  lagPresets: zod.array(zod.number()),
+  partialData: zod.boolean(),
+  notes: zod.array(zod.string()),
+  lastUpdated: zod.number(),
+});

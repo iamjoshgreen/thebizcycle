@@ -918,3 +918,172 @@ components:
           type: number
           nullable: true
       required: [time, quarterLabel, value]
+
+    GliComponentId:
+      type: string
+      enum: [fed, ecb, boj, boe, pboc]
+
+    GliComponent:
+      type: object
+      properties:
+        id:
+          $ref: "#/components/schemas/GliComponentId"
+        label:
+          type: string
+        series:
+          type: string
+        available:
+          type: boolean
+        latestUsdTrillions:
+          type: number
+          nullable: true
+        mom4wPct:
+          type: number
+          nullable: true
+          description: 4-week % change in USD terms
+        weeklyContributionUsdB:
+          type: number
+          nullable: true
+          description: Contribution to the latest weekly GLI delta in billions USD
+        note:
+          type: string
+          nullable: true
+      required:
+        - id
+        - label
+        - series
+        - available
+        - latestUsdTrillions
+        - mom4wPct
+        - weeklyContributionUsdB
+        - note
+
+    GliPoint:
+      type: object
+      properties:
+        time:
+          type: number
+          description: Unix seconds, Friday weekly grid UTC
+        value:
+          type: number
+      required: [time, value]
+
+    GliStatus:
+      type: string
+      enum: [expanding, stalling, contracting, insufficient]
+
+    GliPayload:
+      type: object
+      properties:
+        latestTime:
+          type: number
+          nullable: true
+        latestGliUsdT:
+          type: number
+          nullable: true
+          description: Latest Global Liquidity Index in trillions of USD
+        mom4wPct:
+          type: number
+          nullable: true
+          description: 4-week % change in GLI
+        yoyPct:
+          type: number
+          nullable: true
+        roc13wAnnPct:
+          type: number
+          nullable: true
+          description: Latest 13-week annualized rate of change (%)
+        roc26wAnnPct:
+          type: number
+          nullable: true
+        status:
+          $ref: "#/components/schemas/GliStatus"
+        statusLabel:
+          type: string
+        statusBlurb:
+          type: string
+        components:
+          type: array
+          items:
+            $ref: "#/components/schemas/GliComponent"
+        history:
+          type: array
+          description: Weekly GLI level in USD trillions
+          items:
+            $ref: "#/components/schemas/GliPoint"
+        rocAnn13wHistory:
+          type: array
+          items:
+            $ref: "#/components/schemas/GliPoint"
+        rocAnn26wHistory:
+          type: array
+          items:
+            $ref: "#/components/schemas/GliPoint"
+        btcHistory:
+          type: array
+          description: Weekly BTC-USD close
+          items:
+            $ref: "#/components/schemas/GliPoint"
+        spxHistory:
+          type: array
+          description: Weekly S&P 500 close
+          items:
+            $ref: "#/components/schemas/GliPoint"
+        dxyHistory:
+          type: array
+          description: Weekly DXY (broad nominal USD index) level
+          items:
+            $ref: "#/components/schemas/GliPoint"
+        dxyLatest:
+          type: number
+          nullable: true
+        dxyChange13wPct:
+          type: number
+          nullable: true
+        dxyBlurb:
+          type: string
+        nberRecessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/NberRecessionInterval"
+        defaultLagDays:
+          type: number
+          description: Default lag (days) to shift GLI forward when overlaying on BTC/SPX
+        lagPresets:
+          type: array
+          items:
+            type: number
+        partialData:
+          type: boolean
+        notes:
+          type: array
+          items:
+            type: string
+        lastUpdated:
+          type: number
+      required:
+        - latestTime
+        - latestGliUsdT
+        - mom4wPct
+        - yoyPct
+        - roc13wAnnPct
+        - roc26wAnnPct
+        - status
+        - statusLabel
+        - statusBlurb
+        - components
+        - history
+        - rocAnn13wHistory
+        - rocAnn26wHistory
+        - btcHistory
+        - spxHistory
+        - dxyHistory
+        - dxyLatest
+        - dxyChange13wPct
+        - dxyBlurb
+        - nberRecessions
+        - defaultLagDays
+        - lagPresets
+        - partialData
+        - notes
+        - lastUpdated

@@ -73,6 +73,7 @@ const TABS: { path: string; label: string; short: string }[] = [
   { path: "/housing", label: "Housing", short: "Housing" },
   { path: "/recession", label: "Recession", short: "Recess." },
   { path: "/cyclical", label: "Cyclical GDP", short: "GDP" },
+  { path: "/gli", label: "Global Liquidity", short: "GLI" },
 ];
 
 function formatTimestamp(unix: number): string {

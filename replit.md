@@ -35,7 +35,8 @@ See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and pa
 - `artifacts/business-cycle-chart` — Vite React app. Pages are full-bleed,
   inline-styled, dark-themed (`hsl(230 14% 8%)` bg). Each page has its own
   route in `src/App.tsx` and a tab in `src/components/TopBar.tsx`. Tabs:
-  Business Cycle Chart, Fractal Overlay, Channel, Housing, Recession, Cyclical GDP.
+  Business Cycle Chart, Fractal Overlay, Channel, Housing, Recession, Cyclical GDP,
+  Global Liquidity.
 - `lib/api-spec/openapi.yaml` — single source of truth for API schemas.
   After editing run `pnpm --filter @workspace/api-spec run codegen` to
   regenerate React Query hooks and types in `@workspace/api-client-react`.
@@ -57,3 +58,30 @@ Data strategy in `cyclicalFetcher.ts`:
   the summed series (matches EPB's exact recent-quarter prints).
 - Contraction-frequency stats (since 1956) are computed on YoY composites,
   not single-quarter QoQ — quarterly QoQ counts overstate "contractions".
+
+## Indicator: Global Liquidity Index (`/gli`)
+
+Constructed composite (not a single FRED series, not Global M2):
+
+  GLI = (WALCL − WTREGEN − RRPONTSYD) + ECBASSETSW·(USD/EUR) + JPNASSETS·(USD/JPY)
+
+All components are converted to USD billions on a weekly Friday grid (forward-
+filled from each upstream cadence) and summed. Headline number is reported in
+trillions of USD.
+
+Data sources in `gliFetcher.ts`:
+- Fed net: WALCL (millions USD, weekly) − WTREGEN (billions USD, weekly) −
+  RRPONTSYD (billions USD, daily).
+- ECB: ECBASSETSW (millions EUR, weekly) × DEXUSEU (USD per EUR).
+- BoJ: JPNASSETS (millions JPY, monthly) × 1/DEXJPUS (USD per JPY).
+- DXY context strip: DTWEXBGS (broad nominal USD index, daily).
+- BTC + S&P 500 overlay: Yahoo Finance `BTC-USD` and `^GSPC` weekly close.
+
+v1 scope: BoE and PBoC have no reliable free weekly series on FRED, so they
+appear in the components table as "excluded" with a clear note. Adding them
+later means dropping a new entry into `COMPONENTS` in `gliFetcher.ts`.
+
+Lag overlay: GLI is shifted forward when overlaid on BTC/SPX. Presets are
+56 / 60 / 75 days; default is 75 days. A slider allows free choice 0–180.
+The page describes the framework — it does not predict catch-up size or peak
+timing.

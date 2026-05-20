@@ -366,3 +366,78 @@ export interface CyclicalQuarterEntry {
   quarterLabel: string;
   value: number | null;
 }
+
+export type GliComponentId =
+  (typeof GliComponentId)[keyof typeof GliComponentId];
+
+export const GliComponentId = {
+  fed: "fed",
+  ecb: "ecb",
+  boj: "boj",
+  boe: "boe",
+  pboc: "pboc",
+} as const;
+
+export interface GliComponent {
+  id: GliComponentId;
+  label: string;
+  series: string;
+  available: boolean;
+  latestUsdTrillions: number | null;
+  /** 4-week % change in USD terms */
+  mom4wPct: number | null;
+  /** Contribution to the latest weekly GLI delta in billions USD */
+  weeklyContributionUsdB: number | null;
+  note: string | null;
+}
+
+export interface GliPoint {
+  /** Unix seconds, Friday weekly grid UTC */
+  time: number;
+  value: number;
+}
+
+export type GliStatus = (typeof GliStatus)[keyof typeof GliStatus];
+
+export const GliStatus = {
+  expanding: "expanding",
+  stalling: "stalling",
+  contracting: "contracting",
+  insufficient: "insufficient",
+} as const;
+
+export interface GliPayload {
+  latestTime: number | null;
+  /** Latest Global Liquidity Index in trillions of USD */
+  latestGliUsdT: number | null;
+  /** 4-week % change in GLI */
+  mom4wPct: number | null;
+  yoyPct: number | null;
+  /** Latest 13-week annualized rate of change (%) */
+  roc13wAnnPct: number | null;
+  roc26wAnnPct: number | null;
+  status: GliStatus;
+  statusLabel: string;
+  statusBlurb: string;
+  components: GliComponent[];
+  /** Weekly GLI level in USD trillions */
+  history: GliPoint[];
+  rocAnn13wHistory: GliPoint[];
+  rocAnn26wHistory: GliPoint[];
+  /** Weekly BTC-USD close */
+  btcHistory: GliPoint[];
+  /** Weekly S&P 500 close */
+  spxHistory: GliPoint[];
+  /** Weekly DXY (broad nominal USD index) level */
+  dxyHistory: GliPoint[];
+  dxyLatest: number | null;
+  dxyChange13wPct: number | null;
+  dxyBlurb: string;
+  nberRecessions: NberRecessionInterval[];
+  /** Default lag (days) to shift GLI forward when overlaying on BTC/SPX */
+  defaultLagDays: number;
+  lagPresets: number[];
+  partialData: boolean;
+  notes: string[];
+  lastUpdated: number;
+}

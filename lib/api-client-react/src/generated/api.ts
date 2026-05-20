@@ -19,6 +19,7 @@ import type {
 import type {
   ChartPayload,
   CyclicalPayload,
+  GliPayload,
   HealthStatus,
   HousingPayload,
   NoDataError,
@@ -905,4 +906,149 @@ export const useRefreshCyclical = <
   TContext
 > => {
   return useMutation(getRefreshCyclicalMutationOptions(options));
+};
+
+/**
+ * Pure database SELECT. Returns 404 if no row has ever been written for this indicator.
+ * @summary Get Global Liquidity Index payload from the database
+ */
+export const getGetGliUrl = () => {
+  return `/api/gli`;
+};
+
+export const getGli = async (options?: RequestInit): Promise<GliPayload> => {
+  return customFetch<GliPayload>(getGetGliUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetGliQueryKey = () => {
+  return [`/api/gli`] as const;
+};
+
+export const getGetGliQueryOptions = <
+  TData = Awaited<ReturnType<typeof getGli>>,
+  TError = ErrorType<NoDataError>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getGli>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetGliQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getGli>>> = ({
+    signal,
+  }) => getGli({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getGli>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetGliQueryResult = NonNullable<Awaited<ReturnType<typeof getGli>>>;
+export type GetGliQueryError = ErrorType<NoDataError>;
+
+/**
+ * @summary Get Global Liquidity Index payload from the database
+ */
+
+export function useGetGli<
+  TData = Awaited<ReturnType<typeof getGli>>,
+  TError = ErrorType<NoDataError>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getGli>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetGliQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Force refresh Global Liquidity Index data
+ */
+export const getRefreshGliUrl = () => {
+  return `/api/gli/refresh`;
+};
+
+export const refreshGli = async (
+  options?: RequestInit,
+): Promise<GliPayload> => {
+  return customFetch<GliPayload>(getRefreshGliUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRefreshGliMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof refreshGli>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof refreshGli>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["refreshGli"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof refreshGli>>,
+    void
+  > = () => {
+    return refreshGli(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RefreshGliMutationResult = NonNullable<
+  Awaited<ReturnType<typeof refreshGli>>
+>;
+
+export type RefreshGliMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Force refresh Global Liquidity Index data
+ */
+export const useRefreshGli = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof refreshGli>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof refreshGli>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getRefreshGliMutationOptions(options));
 };
