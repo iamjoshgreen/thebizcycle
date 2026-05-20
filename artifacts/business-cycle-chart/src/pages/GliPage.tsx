@@ -548,6 +548,7 @@ export default function GliPage() {
   const noData = !isLoading && !payload;
 
   const [showFxNeutral, setShowFxNeutral] = useState<boolean>(false);
+  const [includeM2, setIncludeM2] = useState<boolean>(true);
 
   const onRefresh = useCallback(async () => {
     try {
@@ -881,6 +882,30 @@ export default function GliPage() {
                   />
                   BTC (log, right)
                 </span>
+                {payload.m2Available && (
+                  <button
+                    type="button"
+                    onClick={() => setIncludeM2((v) => !v)}
+                    data-testid="gli-toggle-m2"
+                    title={
+                      includeM2
+                        ? "Switch to central-bank balance sheets only"
+                        : "Include M2/M3 money supply (US, EZ, JP, CN) — matches the 'Master Global Liquidity' Pine recipe"
+                    }
+                    style={{
+                      background: includeM2 ? "hsl(280 30% 12% / 0.6)" : "transparent",
+                      border: `1px solid ${includeM2 ? "hsl(280 50% 35%)" : "hsl(230 10% 18%)"}`,
+                      padding: "3px 8px",
+                      borderRadius: 6,
+                      cursor: "pointer",
+                      color: includeM2 ? "hsl(280 90% 80%)" : "rgba(180,180,200,0.55)",
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: 11,
+                    }}
+                  >
+                    + M2 money supply
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setShowFxNeutral((v) => !v)}
@@ -921,8 +946,16 @@ export default function GliPage() {
             </div>
 
             <MainChart
-              normalized={payload.normalizedHistory}
-              normalizedSma={payload.normalizedSmaHistory}
+              normalized={
+                includeM2 && payload.m2Available
+                  ? payload.normalizedWithM2History
+                  : payload.normalizedHistory
+              }
+              normalizedSma={
+                includeM2 && payload.m2Available
+                  ? payload.normalizedWithM2SmaHistory
+                  : payload.normalizedSmaHistory
+              }
               fxNeutral={payload.fxNeutralHistory}
               btc={payload.btcHistory}
               recessions={payload.nberRecessions}
@@ -936,10 +969,23 @@ export default function GliPage() {
                 lineHeight: 1.5,
               }}
             >
-              GLI rebased to 100 at the first Friday of 2014, shifted forward 75
-              days so it aligns with the price tape BTC tends to trade into.
+              {includeM2 && payload.m2Available ? (
+                <>
+                  GLI = central-bank balance sheets (Fed net of TGA + RRP, ECB,
+                  BoJ, PBoC) <strong>plus M2/M3 money supply</strong> (US, EZ,
+                  JP, CN), all in USD, rebased to 100 at Jan 2014 and shifted
+                  forward 75 days. This is the "Master Global Liquidity" recipe.
+                </>
+              ) : (
+                <>
+                  GLI = central-bank balance sheets only (Fed net of TGA + RRP,
+                  ECB, BoJ, PBoC), in USD, rebased to 100 at Jan 2014 and
+                  shifted forward 75 days. <em>M2 money supply is off</em> —
+                  toggle it on for the full Pine-script-style composite.
+                </>
+              )}
               {showFxNeutral &&
-                " Cyan = FX-neutral composite (components indexed in local currency, weighted by USD share at anchor — strips dollar moves)."}
+                " Cyan = FX-neutral composite (CB components indexed in local currency, weighted by USD share at anchor — strips dollar moves)."}
             </div>
           </section>
 

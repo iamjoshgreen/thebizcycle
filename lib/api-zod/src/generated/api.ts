@@ -894,6 +894,29 @@ export const GetGliResponse = zod.object({
       }),
     )
     .describe("90-day (≈13-week) simple moving average of normalizedHistory"),
+  normalizedWithM2History: zod
+    .array(
+      zod.object({
+        time: zod.number().describe("Unix seconds, Friday weekly grid UTC"),
+        value: zod.number(),
+      }),
+    )
+    .describe(
+      'Weekly (CB balance sheets + M2\/M3 money supply) rebased to 100 at the anchor — matches the \"Master Global Liquidity\" Pine recipe',
+    ),
+  normalizedWithM2SmaHistory: zod
+    .array(
+      zod.object({
+        time: zod.number().describe("Unix seconds, Friday weekly grid UTC"),
+        value: zod.number(),
+      }),
+    )
+    .describe("90-day SMA of normalizedWithM2History"),
+  m2Available: zod
+    .boolean()
+    .describe(
+      "Whether the M2\/M3 stack was successfully fetched and the With-M2 series are populated",
+    ),
   fxNeutralHistory: zod
     .array(
       zod.object({
@@ -1035,6 +1058,29 @@ export const RefreshGliResponse = zod.object({
       }),
     )
     .describe("90-day (≈13-week) simple moving average of normalizedHistory"),
+  normalizedWithM2History: zod
+    .array(
+      zod.object({
+        time: zod.number().describe("Unix seconds, Friday weekly grid UTC"),
+        value: zod.number(),
+      }),
+    )
+    .describe(
+      'Weekly (CB balance sheets + M2\/M3 money supply) rebased to 100 at the anchor — matches the \"Master Global Liquidity\" Pine recipe',
+    ),
+  normalizedWithM2SmaHistory: zod
+    .array(
+      zod.object({
+        time: zod.number().describe("Unix seconds, Friday weekly grid UTC"),
+        value: zod.number(),
+      }),
+    )
+    .describe("90-day SMA of normalizedWithM2History"),
+  m2Available: zod
+    .boolean()
+    .describe(
+      "Whether the M2\/M3 stack was successfully fetched and the With-M2 series are populated",
+    ),
   fxNeutralHistory: zod
     .array(
       zod.object({

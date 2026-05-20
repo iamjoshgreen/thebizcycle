@@ -1021,6 +1021,19 @@ components:
           description: 90-day (≈13-week) simple moving average of normalizedHistory
           items:
             $ref: "#/components/schemas/GliPoint"
+        normalizedWithM2History:
+          type: array
+          description: Weekly (CB balance sheets + M2/M3 money supply) rebased to 100 at the anchor — matches the "Master Global Liquidity" Pine recipe
+          items:
+            $ref: "#/components/schemas/GliPoint"
+        normalizedWithM2SmaHistory:
+          type: array
+          description: 90-day SMA of normalizedWithM2History
+          items:
+            $ref: "#/components/schemas/GliPoint"
+        m2Available:
+          type: boolean
+          description: Whether the M2/M3 stack was successfully fetched and the With-M2 series are populated
         fxNeutralHistory:
           type: array
           description: FX-neutral composite — each component indexed in its own local currency, weighted by USD share at the anchor date
@@ -1098,6 +1111,9 @@ components:
         - history
         - normalizedHistory
         - normalizedSmaHistory
+        - normalizedWithM2History
+        - normalizedWithM2SmaHistory
+        - m2Available
         - fxNeutralHistory
         - anchorTime
         - asiaDataThrough

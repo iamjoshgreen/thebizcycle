@@ -426,6 +426,12 @@ export interface GliPayload {
   normalizedHistory: GliPoint[];
   /** 90-day (≈13-week) simple moving average of normalizedHistory */
   normalizedSmaHistory: GliPoint[];
+  /** Weekly (CB balance sheets + M2/M3 money supply) rebased to 100 at the anchor — matches the "Master Global Liquidity" Pine recipe */
+  normalizedWithM2History: GliPoint[];
+  /** 90-day SMA of normalizedWithM2History */
+  normalizedWithM2SmaHistory: GliPoint[];
+  /** Whether the M2/M3 stack was successfully fetched and the With-M2 series are populated */
+  m2Available: boolean;
   /** FX-neutral composite — each component indexed in its own local currency, weighted by USD share at the anchor date */
   fxNeutralHistory: GliPoint[];
   /** Unix seconds of the Friday used as the index anchor (where normalized = 100) */

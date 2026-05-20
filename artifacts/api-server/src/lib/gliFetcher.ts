@@ -48,9 +48,12 @@ export interface GliPayload {
   history: GliPoint[];
   normalizedHistory: GliPoint[];
   normalizedSmaHistory: GliPoint[];
+  normalizedWithM2History: GliPoint[];
+  normalizedWithM2SmaHistory: GliPoint[];
   fxNeutralHistory: GliPoint[];
   anchorTime: number | null;
   asiaDataThrough: number | null;
+  m2Available: boolean;
   rocAnn13wHistory: GliPoint[];
   rocAnn26wHistory: GliPoint[];
   btcHistory: GliPoint[];
@@ -378,6 +381,28 @@ export async function fetchGliPayload(): Promise<GliPayload> {
     fetchUsrec(),
   ]);
 
+  // ─── M2 / M3 money supply series (optional add-on, toggled in UI) ───────────
+  const [m2us, m2cn, m3ez, m3jp, dexchUs] = await Promise.all([
+    tryFetchFred("M2SL"),            // US M2, billions USD, monthly (SA)
+    tryFetchFred("MYAGM2CNM189N"),   // China M2, 100M CNY, monthly (NSA)
+    tryFetchFred("MYAGM3EZM196N"),   // Eurozone M3, millions EUR, monthly (NSA)
+    tryFetchFred("MYAGM3JPM189N"),   // Japan M3, 100M JPY, monthly (NSA)
+    tryFetchFred("DEXCHUS"),         // CNY per 1 USD, daily
+  ]);
+  const m2Available = !!(m2us && m2cn && m3ez && m3jp && dexchUs);
+  if (!m2Available) {
+    notes.push(
+      "M2 overlay partially unavailable — toggle will be hidden or partial. Missing: " +
+        [
+          !m2us && "M2SL",
+          !m2cn && "MYAGM2CNM189N",
+          !m3ez && "MYAGM3EZM196N",
+          !m3jp && "MYAGM3JPM189N",
+          !dexchUs && "DEXCHUS",
+        ].filter(Boolean).join(", "),
+    );
+  }
+
   if (!walcl) notes.push("Missing FRED series WALCL (Fed total assets)");
   if (!wtregen) notes.push("Missing FRED series WTREGEN (Treasury General Account)");
   if (!rrp) notes.push("Missing FRED series RRPONTSYD (Overnight RRP)");
@@ -410,6 +435,11 @@ export async function fetchGliPayload(): Promise<GliPayload> {
   const dexUsEuFf = forwardFill(dexusEu, fridays); // USD per EUR
   const dexJpUsFf = forwardFill(dexjpUs, fridays); // JPY per USD
   const dxyFf = forwardFill(dxy, fridays);         // index
+  const m2usFf = forwardFill(m2us, fridays);       // $B USD
+  const m2cnFf = forwardFill(m2cn, fridays);       // 100M CNY units
+  const m3ezFf = forwardFill(m3ez, fridays);       // millions EUR
+  const m3jpFf = forwardFill(m3jp, fridays);       // 100M JPY units
+  const dexchUsFf = forwardFill(dexchUs, fridays); // CNY per USD
 
   // Build the GLI series + per-component USD-billion series on the grid.
   // Also keep per-component LOCAL-currency series (for the FX-neutral overlay).
@@ -419,7 +449,8 @@ export async function fetchGliPayload(): Promise<GliPayload> {
   const pbocUsdB = new Map<number, number>();
   const ecbLocalB = new Map<number, number>();  // EUR billions
   const bojLocalB = new Map<number, number>();  // JPY billions
-  const gli = new Map<number, number>(); // billions USD
+  const gli = new Map<number, number>(); // billions USD (CB only)
+  const m2TotalB = new Map<number, number>(); // billions USD (M2/M3 stack)
 
   for (const friday of fridays) {
     const ts = toUnix(friday);
@@ -459,6 +490,23 @@ export async function fetchGliPayload(): Promise<GliPayload> {
     ecbLocalB.set(ts, ecbLoc);
     bojLocalB.set(ts, bojLoc);
     gli.set(ts, fed + ecbU + bojU + pbocU);
+
+    // M2/M3 stack (optional). Need all four + CNY FX + EUR FX + JPY FX.
+    const m2usB = m2usFf.get(ts);             // $B
+    const m2cnLoc = m2cnFf.get(ts);           // 100M CNY
+    const m3ezLoc = m3ezFf.get(ts);           // millions EUR
+    const m3jpLoc = m3jpFf.get(ts);           // 100M JPY
+    const cnyPerUsd = dexchUsFf.get(ts) ?? null;
+    const usdPerCny = cnyPerUsd && cnyPerUsd > 0 ? 1 / cnyPerUsd : null;
+    if (
+      m2usB != null && m2cnLoc != null && m3ezLoc != null && m3jpLoc != null &&
+      usdPerCny != null
+    ) {
+      const m2cnUsdB = m2cnLoc * 0.1 * usdPerCny;         // 100M CNY → $B
+      const m3ezUsdB = (m3ezLoc / 1000) * usdPerEur;      // millions EUR → $B
+      const m3jpUsdB = m3jpLoc * 0.1 * usdPerJpy;         // 100M JPY → $B
+      m2TotalB.set(ts, m2usB + m2cnUsdB + m3ezUsdB + m3jpUsdB);
+    }
   }
 
   const gliHistory: GliPoint[] = Array.from(gli.entries())
@@ -507,6 +555,32 @@ export async function fetchGliPayload(): Promise<GliPayload> {
     return out;
   }
   const normalizedSmaHistory = sma(normalizedHistory, 13);
+
+  // ─── GLI + M2 stack (matches the Pine "Master Global Liquidity" recipe) ─────
+  // Build the combined series at every Friday where BOTH the CB stack and the
+  // M2/M3 stack have a value, then rebase to 100 at the first Friday on/after
+  // 2014-01-01 where the combined value is present.
+  const combinedB = new Map<number, number>(); // billions USD
+  for (const [t, cbB] of gli) {
+    const m2B = m2TotalB.get(t);
+    if (m2B == null) continue;
+    combinedB.set(t, cbB + m2B);
+  }
+  const combinedHistoryB: GliPoint[] = Array.from(combinedB.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([time, v]) => ({ time, value: v }));
+
+  let combinedAnchorB = 0;
+  for (const p of combinedHistoryB) {
+    if (p.time < ANCHOR_SEED) continue;
+    combinedAnchorB = p.value;
+    break;
+  }
+  const normalizedWithM2History: GliPoint[] =
+    combinedAnchorB > 0
+      ? combinedHistoryB.map((p) => ({ time: p.time, value: (p.value / combinedAnchorB) * 100 }))
+      : [];
+  const normalizedWithM2SmaHistory = sma(normalizedWithM2History, 13);
 
   // FX-neutral: weight each component by its USD share at anchor, but index each
   // by its LOCAL-currency value rebased to 100 at anchor. Strips dollar moves.
@@ -723,9 +797,12 @@ export async function fetchGliPayload(): Promise<GliPayload> {
     history: gliHistory,
     normalizedHistory,
     normalizedSmaHistory,
+    normalizedWithM2History,
+    normalizedWithM2SmaHistory,
     fxNeutralHistory,
     anchorTime: anchorTs,
     asiaDataThrough,
+    m2Available,
     rocAnn13wHistory: rocAnn13w,
     rocAnn26wHistory: rocAnn26w,
     btcHistory,
