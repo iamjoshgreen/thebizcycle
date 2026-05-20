@@ -198,6 +198,39 @@ paths:
               schema:
                 $ref: "#/components/schemas/CyclicalPayload"
 
+  /gli:
+    get:
+      operationId: getGli
+      tags: [gli]
+      summary: Get Global Liquidity Index payload from the database
+      description: Pure database SELECT. Returns 404 if no row has ever been written for this indicator.
+      responses:
+        "200":
+          description: GLI payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GliPayload"
+        "404":
+          description: No data has been saved for this indicator yet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NoDataError"
+
+  /gli/refresh:
+    post:
+      operationId: refreshGli
+      tags: [gli]
+      summary: Force refresh Global Liquidity Index data
+      responses:
+        "200":
+          description: Refreshed GLI payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GliPayload"
+
 components:
   schemas:
     NoDataError:
