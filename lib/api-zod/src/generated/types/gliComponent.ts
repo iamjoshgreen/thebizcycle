@@ -5,6 +5,7 @@
  * Business Cycle Chart API
  * OpenAPI spec version: 0.1.0
  */
+import type { GliComponentFrequency } from "./gliComponentFrequency";
 import type { GliComponentId } from "./gliComponentId";
 
 export interface GliComponent {
@@ -15,7 +16,11 @@ export interface GliComponent {
   latestUsdTrillions: number | null;
   /** 4-week % change in USD terms */
   mom4wPct: number | null;
-  /** Contribution to the latest weekly GLI delta in billions USD */
+  /** Most-recent USD-billion change. For weekly series this is week-over-week; for monthly series (BoJ, PBoC) it is the latest month-over-month dollar change so the column is not stuck at $0 between monthly publishes. */
   weeklyContributionUsdB: number | null;
+  /** Unix seconds of the latest RAW upstream observation (not the forward-filled Friday). For monthly series this can be weeks behind the headline timestamp. */
+  latestObservationTime: number | null;
+  /** Publication cadence of the underlying FRED series. */
+  frequency: GliComponentFrequency;
   note: string | null;
 }

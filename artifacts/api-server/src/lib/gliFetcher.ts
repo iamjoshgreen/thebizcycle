@@ -21,6 +21,8 @@ export interface GliComponent {
   latestUsdTrillions: number | null;
   mom4wPct: number | null;
   weeklyContributionUsdB: number | null;
+  latestObservationTime: number | null;
+  frequency: "weekly" | "monthly";
   note: string | null;
 }
 
@@ -37,8 +39,11 @@ export interface NberRecessionInterval {
 export interface GliPayload {
   latestTime: number | null;
   latestGliUsdT: number | null;
+  latestGliWithM2UsdT: number | null;
   mom4wPct: number | null;
+  mom4wPctWithM2: number | null;
   yoyPct: number | null;
+  yoyPctWithM2: number | null;
   roc13wAnnPct: number | null;
   roc26wAnnPct: number | null;
   status: GliStatus;
@@ -53,6 +58,7 @@ export interface GliPayload {
   fxNeutralHistory: GliPoint[];
   anchorTime: number | null;
   asiaDataThrough: number | null;
+  m2DataThrough: number | null;
   m2Available: boolean;
   rocAnn13wHistory: GliPoint[];
   rocAnn26wHistory: GliPoint[];
@@ -311,13 +317,13 @@ function statusCopy(s: GliStatus): { label: string; blurb: string } {
       return {
         label: "Liquidity expanding",
         blurb:
-          "Central bank balance sheets net of sterilization are growing. Risk assets typically follow with a ~2-month lag — the bigger the acceleration, the bigger the catch-up trade.",
+          "Central bank balance sheets net of sterilization are growing. Risk assets have historically tracked the acceleration of liquidity more closely than the level — and they typically follow with a ~75-day lag.",
       };
     case "contracting":
       return {
         label: "Liquidity contracting",
         blurb:
-          "Net global liquidity is falling. Risk assets tend to fade with a lag; rallies in this regime are usually mean reversions, not trend reversals.",
+          "Net global liquidity is falling. Risk assets have historically faded with a ~75-day lag in this regime, though dollar strength, ETF flows, and cycle dynamics also matter.",
       };
     case "stalling":
       return {
@@ -435,10 +441,10 @@ export async function fetchGliPayload(): Promise<GliPayload> {
   const dexUsEuFf = forwardFill(dexusEu, fridays); // USD per EUR
   const dexJpUsFf = forwardFill(dexjpUs, fridays); // JPY per USD
   const dxyFf = forwardFill(dxy, fridays);         // index
-  const m2usFf = forwardFill(m2us, fridays);       // $B USD
-  const m2cnFf = forwardFill(m2cn, fridays);       // 100M CNY units
-  const m3ezFf = forwardFill(m3ez, fridays);       // millions EUR
-  const m3jpFf = forwardFill(m3jp, fridays);       // 100M JPY units
+  const m2usFf = forwardFill(m2us, fridays);       // $B USD (M2SL is "Billions of Dollars" on FRED)
+  const m2cnFf = forwardFill(m2cn, fridays);       // raw CNY (FRED unit: "National Currency")
+  const m3ezFf = forwardFill(m3ez, fridays);       // raw EUR (FRED unit: "National Currency")
+  const m3jpFf = forwardFill(m3jp, fridays);       // raw JPY (FRED unit: "National Currency")
   const dexchUsFf = forwardFill(dexchUs, fridays); // CNY per USD
 
   // Build the GLI series + per-component USD-billion series on the grid.
@@ -492,19 +498,23 @@ export async function fetchGliPayload(): Promise<GliPayload> {
     gli.set(ts, fed + ecbU + bojU + pbocU);
 
     // M2/M3 stack (optional). Need all four + CNY FX + EUR FX + JPY FX.
-    const m2usB = m2usFf.get(ts);             // $B
-    const m2cnLoc = m2cnFf.get(ts);           // 100M CNY
-    const m3ezLoc = m3ezFf.get(ts);           // millions EUR
-    const m3jpLoc = m3jpFf.get(ts);           // 100M JPY
+    // The foreign broad-money series (MYAGM2CNM189N, MYAGM3EZM196N,
+    // MYAGM3JPM189N) are reported by FRED in raw national currency units, so
+    // converting to billions USD means dividing by 1e9 (raw → billions) then
+    // multiplying by the USD-per-FX rate.
+    const m2usB = m2usFf.get(ts);             // $B already
+    const m2cnRaw = m2cnFf.get(ts);           // raw CNY
+    const m3ezRaw = m3ezFf.get(ts);           // raw EUR
+    const m3jpRaw = m3jpFf.get(ts);           // raw JPY
     const cnyPerUsd = dexchUsFf.get(ts) ?? null;
     const usdPerCny = cnyPerUsd && cnyPerUsd > 0 ? 1 / cnyPerUsd : null;
     if (
-      m2usB != null && m2cnLoc != null && m3ezLoc != null && m3jpLoc != null &&
+      m2usB != null && m2cnRaw != null && m3ezRaw != null && m3jpRaw != null &&
       usdPerCny != null
     ) {
-      const m2cnUsdB = m2cnLoc * 0.1 * usdPerCny;         // 100M CNY → $B
-      const m3ezUsdB = (m3ezLoc / 1000) * usdPerEur;      // millions EUR → $B
-      const m3jpUsdB = m3jpLoc * 0.1 * usdPerJpy;         // 100M JPY → $B
+      const m2cnUsdB = (m2cnRaw / 1e9) * usdPerCny;     // raw CNY → $B USD
+      const m3ezUsdB = (m3ezRaw / 1e9) * usdPerEur;     // raw EUR → $B USD
+      const m3jpUsdB = (m3jpRaw / 1e9) * usdPerJpy;     // raw JPY → $B USD
       m2TotalB.set(ts, m2usB + m2cnUsdB + m3ezUsdB + m3jpUsdB);
     }
   }
@@ -617,6 +627,24 @@ export async function fetchGliPayload(): Promise<GliPayload> {
       ? Math.min(bojRawLatest, pbocRawLatest)
       : (bojRawLatest ?? pbocRawLatest ?? null);
 
+  // (m2DataThrough is computed just below.)
+  // M2 stack staleness: FRED's foreign broad-money series (MYAGM2CNM189N,
+  // MYAGM3EZM196N, MYAGM3JPM189N) were discontinued in 2017-2019 and are
+  // forward-filled from those dates. US M2 (M2SL) is current. Disclose the
+  // oldest of the three foreign tails so the user knows what they're seeing.
+  const m2cnRawLatest = m2cn && m2cn.length > 0 ? m2cn[m2cn.length - 1].time : null;
+  const m3ezRawLatest = m3ez && m3ez.length > 0 ? m3ez[m3ez.length - 1].time : null;
+  const m3jpRawLatest = m3jp && m3jp.length > 0 ? m3jp[m3jp.length - 1].time : null;
+  const m2DataThrough = [m2cnRawLatest, m3ezRawLatest, m3jpRawLatest]
+    .filter((t): t is number => t != null)
+    .reduce<number | null>((min, t) => (min == null || t < min ? t : min), null);
+  if (m2Available && m2DataThrough != null) {
+    const d = new Date(m2DataThrough * 1000).toISOString().slice(0, 10);
+    notes.push(
+      `M2/M3 stack: US M2 (M2SL) is current. CN/EZ/JP broad money were discontinued on FRED in 2017-2019 and are forward-filled from ${d}. Treat the With-M2 line as a directional reference, not a live level.`,
+    );
+  }
+
   // 13/26-week annualized rate of change.
   function annRoc(series: GliPoint[], weeks: number): GliPoint[] {
     const out: GliPoint[] = [];
@@ -648,6 +676,18 @@ export async function fetchGliPayload(): Promise<GliPayload> {
   const mom4wPct = pctChangeBack(gliHistory, 4);
   const yoyPct = pctChangeBack(gliHistory, 52);
 
+  // With-M2 ("Master Global Liquidity" recipe) headline totals — used when
+  // the user toggles M2 on so the headline matches what the chart is showing.
+  // combinedHistoryB stores cb + m2 in $B; divide by 1000 to match the $T scale
+  // used by latestGliUsdT (see `gliHistory` mapping above).
+  const latestWithM2 =
+    combinedHistoryB.length > 0
+      ? combinedHistoryB[combinedHistoryB.length - 1]
+      : null;
+  const latestGliWithM2UsdT = latestWithM2 ? latestWithM2.value / 1000 : null;
+  const mom4wPctWithM2 = pctChangeBack(combinedHistoryB, 4);
+  const yoyPctWithM2 = pctChangeBack(combinedHistoryB, 52);
+
   const latestRoc13w =
     rocAnn13w.length > 0 ? rocAnn13w[rocAnn13w.length - 1].value : null;
   const latestRoc26w =
@@ -656,8 +696,17 @@ export async function fetchGliPayload(): Promise<GliPayload> {
   const status = classifyStatus(latestRoc13w, mom4wPct);
   const { label: statusLabel, blurb: statusBlurb } = statusCopy(status);
 
-  // Per-component summaries
-  function summarizeComponent(spec: ComponentSpec, seriesMap: Map<number, number>): GliComponent {
+  // Per-component summaries.
+  // `rawLatestTime` is the latest RAW upstream observation date (not the
+  // forward-filled Friday). For monthly series (BoJ, PBoC), this is many weeks
+  // older than today and the "Recent Δ" is the latest month-over-month change,
+  // not a weekly delta (weekly delta is 0 between monthly publishes).
+  function summarizeComponent(
+    spec: ComponentSpec,
+    seriesMap: Map<number, number>,
+    frequency: "weekly" | "monthly",
+    rawLatestTime: number | null,
+  ): GliComponent {
     if (spec.unavailableNote) {
       return {
         id: spec.id,
@@ -667,6 +716,8 @@ export async function fetchGliPayload(): Promise<GliPayload> {
         latestUsdTrillions: null,
         mom4wPct: null,
         weeklyContributionUsdB: null,
+        latestObservationTime: null,
+        frequency,
         note: spec.unavailableNote,
       };
     }
@@ -680,12 +731,25 @@ export async function fetchGliPayload(): Promise<GliPayload> {
         latestUsdTrillions: null,
         mom4wPct: null,
         weeklyContributionUsdB: null,
+        latestObservationTime: rawLatestTime,
+        frequency,
         note: "No data points after joining with FX series",
       };
     }
     const last = sorted[sorted.length - 1][1]; // $B
     const fourBack = sorted.length > 4 ? sorted[sorted.length - 1 - 4][1] : null;
-    const oneBack = sorted.length > 1 ? sorted[sorted.length - 2][1] : null;
+    // "Recent Δ": for weekly series, the latest week-over-week change. For
+    // monthly series, look back through the forward-filled grid to find the
+    // most recent value that DIFFERS from the latest — that gives the latest
+    // real month-over-month dollar change in $B, not the misleading 0 you'd
+    // get from a same-monthly-print weekly delta.
+    let recentDelta: number | null = null;
+    for (let i = sorted.length - 2; i >= 0; i--) {
+      if (sorted[i][1] !== last) {
+        recentDelta = last - sorted[i][1];
+        break;
+      }
+    }
     return {
       id: spec.id,
       label: spec.label,
@@ -693,16 +757,20 @@ export async function fetchGliPayload(): Promise<GliPayload> {
       available: true,
       latestUsdTrillions: last / 1000,
       mom4wPct: fourBack != null && fourBack !== 0 ? ((last - fourBack) / Math.abs(fourBack)) * 100 : null,
-      weeklyContributionUsdB: oneBack != null ? last - oneBack : null,
+      weeklyContributionUsdB: recentDelta,
+      latestObservationTime: rawLatestTime,
+      frequency,
       note: null,
     };
   }
 
+  const walclLatest = walcl && walcl.length > 0 ? walcl[walcl.length - 1].time : null;
+  const ecbLatest = ecb && ecb.length > 0 ? ecb[ecb.length - 1].time : null;
   const components: GliComponent[] = [
-    summarizeComponent(COMPONENTS[0], fedUsdB),
-    summarizeComponent(COMPONENTS[1], ecbUsdB),
-    summarizeComponent(COMPONENTS[2], bojUsdB),
-    summarizeComponent(COMPONENTS[3], pbocUsdB),
+    summarizeComponent(COMPONENTS[0], fedUsdB, "weekly", walclLatest),
+    summarizeComponent(COMPONENTS[1], ecbUsdB, "weekly", ecbLatest),
+    summarizeComponent(COMPONENTS[2], bojUsdB, "monthly", bojRawLatest),
+    summarizeComponent(COMPONENTS[3], pbocUsdB, "monthly", pbocRawLatest),
   ];
 
   // DXY: weekly history + latest + 13w change
@@ -786,6 +854,9 @@ export async function fetchGliPayload(): Promise<GliPayload> {
   return {
     latestTime,
     latestGliUsdT,
+    latestGliWithM2UsdT,
+    mom4wPctWithM2,
+    yoyPctWithM2,
     mom4wPct,
     yoyPct,
     roc13wAnnPct: latestRoc13w,
@@ -802,6 +873,7 @@ export async function fetchGliPayload(): Promise<GliPayload> {
     fxNeutralHistory,
     anchorTime: anchorTs,
     asiaDataThrough,
+    m2DataThrough,
     m2Available,
     rocAnn13wHistory: rocAnn13w,
     rocAnn26wHistory: rocAnn26w,

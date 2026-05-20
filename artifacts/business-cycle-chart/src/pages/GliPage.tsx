@@ -171,6 +171,24 @@ function ComponentRow({ c }: { c: GliComponent }) {
         {c.weeklyContributionUsdB != null
           ? `${c.weeklyContributionUsdB > 0 ? "+" : ""}$${fmtNum(c.weeklyContributionUsdB, 1)}B`
           : "—"}
+        {c.frequency === "monthly" && c.latestObservationTime != null && (
+          <div
+            style={{
+              marginTop: 2,
+              fontSize: 10,
+              fontWeight: 400,
+              color: "rgba(180,180,200,0.45)",
+              fontFamily: "'JetBrains Mono', monospace",
+            }}
+            title="Monthly series — value updates once a month, not weekly."
+          >
+            MoM, as of{" "}
+            {new Date(c.latestObservationTime * 1000).toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+            })}
+          </div>
+        )}
       </td>
     </tr>
   );
@@ -776,9 +794,9 @@ export default function GliPage() {
                     lineHeight: 1.45,
                   }}
                 >
-                  Net central-bank money in the system. Risk assets — especially BTC —
-                  tend to follow with a ~2-month lag. Direction and acceleration matter
-                  more than the absolute level.
+                  {includeM2 && payload.m2Available
+                    ? "Central-bank balance sheets plus M2/M3 broad money, in USD — the \"Master Global Liquidity\" recipe. Risk assets have historically tracked the acceleration of liquidity more closely than the level, with a ~75-day lag."
+                    : "Net central-bank money in the system. Risk assets — especially BTC — have historically tracked the acceleration of liquidity more closely than the level, with a ~75-day lag."}
                 </div>
               </div>
               <div
@@ -829,9 +847,11 @@ export default function GliPage() {
                   }}
                   data-testid="gli-headline"
                 >
-                  {payload.latestGliUsdT != null
-                    ? `$${fmtNum(payload.latestGliUsdT, 2)}T`
-                    : "—"}
+                  {(() => {
+                    const useM2 = includeM2 && payload.m2Available;
+                    const v = useM2 ? payload.latestGliWithM2UsdT : payload.latestGliUsdT;
+                    return v != null ? `$${fmtNum(v, 2)}T` : "—";
+                  })()}
                 </div>
                 <div
                   style={{
@@ -840,8 +860,18 @@ export default function GliPage() {
                     fontFamily: "'JetBrains Mono', monospace",
                   }}
                 >
-                  MoM {fmtPct(payload.mom4wPct)} · YoY {fmtPct(payload.yoyPct)} ·
-                  13w ann {fmtPct(payload.roc13wAnnPct)}
+                  {(() => {
+                    const useM2 = includeM2 && payload.m2Available;
+                    const mom = useM2 ? payload.mom4wPctWithM2 : payload.mom4wPct;
+                    const yoy = useM2 ? payload.yoyPctWithM2 : payload.yoyPct;
+                    return (
+                      <>
+                        {useM2 ? "CB + M2 · " : "CB only · "}
+                        MoM {fmtPct(mom)} · YoY {fmtPct(yoy)} ·
+                        13w ann {fmtPct(payload.roc13wAnnPct)}
+                      </>
+                    );
+                  })()}
                 </div>
                 {payload.asiaDataThrough != null && (
                   <span
@@ -865,6 +895,31 @@ export default function GliPage() {
                     {new Date(payload.asiaDataThrough * 1000).toLocaleDateString("en-US", {
                       month: "short",
                       day: "numeric",
+                      year: "numeric",
+                    })}
+                  </span>
+                )}
+                {includeM2 && payload.m2Available && payload.m2DataThrough != null && (
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 6,
+                      padding: "2px 8px",
+                      borderRadius: 4,
+                      background: "hsl(0 30% 10% / 0.5)",
+                      border: "1px solid rgba(239,68,68,0.35)",
+                      color: "rgba(255,180,180,0.9)",
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: 10,
+                      letterSpacing: "0.05em",
+                    }}
+                    title="FRED's foreign broad-money series (MYAGM2CNM189N, MYAGM3EZM196N, MYAGM3JPM189N) were discontinued. CN/EZ/JP M2/M3 values are carried forward from this date; only US M2 is current. Treat the With-M2 line as a directional reference, not a live level."
+                    data-testid="gli-m2-stale"
+                  >
+                    Foreign M2/M3 frozen since{" "}
+                    {new Date(payload.m2DataThrough * 1000).toLocaleDateString("en-US", {
+                      month: "short",
                       year: "numeric",
                     })}
                   </span>
@@ -918,7 +973,7 @@ export default function GliPage() {
                   fontFamily: "'Inter', sans-serif",
                 }}
               >
-                Bitcoin and the GLI (not Global M2) ·{" "}
+                Bitcoin and the GLI ·{" "}
                 <span style={{ fontWeight: 500, color: "rgba(220,225,235,0.7)" }}>
                   Bitcoin usually follows with a ~75-day lag
                 </span>
@@ -1171,7 +1226,7 @@ export default function GliPage() {
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr>
-                    {["Component", "Latest", "4w change", "Weekly Δ"].map((h, i) => (
+                    {["Component", "Latest", "4w change", "Recent Δ"].map((h, i) => (
                       <th
                         key={h}
                         style={{
@@ -1323,9 +1378,11 @@ export default function GliPage() {
                 lineHeight: 1.5,
               }}
             >
-              BTC tracks the <em>acceleration</em> of liquidity, not the level. A
-              positive 13w that's turning higher is the bullish signature; turning
-              lower while still positive is the early warning.
+              BTC has historically tracked the <em>acceleration</em> of liquidity
+              more closely than the level — though dollar strength, ETF flows, and
+              cycle dynamics also matter. A positive 13w that's turning higher is
+              the bullish signature; turning lower while still positive is the
+              early warning.
             </div>
           </section>
 
@@ -1352,7 +1409,7 @@ export default function GliPage() {
                   fontFamily: "'JetBrains Mono', monospace",
                 }}
               >
-                DXY (broad)
+                Trade-Weighted USD (DTWEXBGS)
               </span>
               <span
                 style={{

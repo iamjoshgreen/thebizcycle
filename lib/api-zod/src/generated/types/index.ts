@@ -24,6 +24,7 @@ export * from "./dominoStatusOrderStatus";
 export * from "./dominoStatusState";
 export * from "./fedStatus";
 export * from "./gliComponent";
+export * from "./gliComponentFrequency";
 export * from "./gliComponentId";
 export * from "./gliPayload";
 export * from "./gliPoint";

@@ -12,11 +12,16 @@ import type { NberRecessionInterval } from "./nberRecessionInterval";
 
 export interface GliPayload {
   latestTime: number | null;
-  /** Latest Global Liquidity Index in trillions of USD */
+  /** Latest Global Liquidity Index in trillions of USD (central-bank stack only). */
   latestGliUsdT: number | null;
-  /** 4-week % change in GLI */
+  /** Latest GLI in trillions of USD with the M2/M3 broad-money stack added — matches the "Master Global Liquidity" Pine recipe. */
+  latestGliWithM2UsdT: number | null;
+  /** 4-week % change in central-bank-only GLI. */
   mom4wPct: number | null;
+  /** 4-week % change in the With-M2 composite. */
+  mom4wPctWithM2: number | null;
   yoyPct: number | null;
+  yoyPctWithM2: number | null;
   /** Latest 13-week annualized rate of change (%) */
   roc13wAnnPct: number | null;
   roc26wAnnPct: number | null;
@@ -34,6 +39,8 @@ export interface GliPayload {
   normalizedWithM2History: GliPoint[];
   /** 90-day SMA of normalizedWithM2History */
   normalizedWithM2SmaHistory: GliPoint[];
+  /** Unix seconds of the OLDEST raw observation across the foreign broad-money series (MYAGM2CNM189N, MYAGM3EZM196N, MYAGM3JPM189N). Those FRED series were discontinued in 2017-2019; the With-M2 line forward-fills from this date. Used to render a clear staleness warning when the M2 toggle is on. */
+  m2DataThrough: number | null;
   /** Whether the M2/M3 stack was successfully fetched and the With-M2 series are populated */
   m2Available: boolean;
   /** FX-neutral composite — each component indexed in its own local currency, weighted by USD share at the anchor date */

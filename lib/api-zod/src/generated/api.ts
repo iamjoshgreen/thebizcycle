@@ -839,9 +839,25 @@ export const GetGliResponse = zod.object({
   latestGliUsdT: zod
     .number()
     .nullable()
-    .describe("Latest Global Liquidity Index in trillions of USD"),
-  mom4wPct: zod.number().nullable().describe("4-week % change in GLI"),
+    .describe(
+      "Latest Global Liquidity Index in trillions of USD (central-bank stack only).",
+    ),
+  latestGliWithM2UsdT: zod
+    .number()
+    .nullable()
+    .describe(
+      'Latest GLI in trillions of USD with the M2\/M3 broad-money stack added — matches the \"Master Global Liquidity\" Pine recipe.',
+    ),
+  mom4wPct: zod
+    .number()
+    .nullable()
+    .describe("4-week % change in central-bank-only GLI."),
+  mom4wPctWithM2: zod
+    .number()
+    .nullable()
+    .describe("4-week % change in the With-M2 composite."),
   yoyPct: zod.number().nullable(),
+  yoyPctWithM2: zod.number().nullable(),
   roc13wAnnPct: zod
     .number()
     .nullable()
@@ -865,8 +881,17 @@ export const GetGliResponse = zod.object({
         .number()
         .nullable()
         .describe(
-          "Contribution to the latest weekly GLI delta in billions USD",
+          "Most-recent USD-billion change. For weekly series this is week-over-week; for monthly series (BoJ, PBoC) it is the latest month-over-month dollar change so the column is not stuck at $0 between monthly publishes.",
         ),
+      latestObservationTime: zod
+        .number()
+        .nullable()
+        .describe(
+          "Unix seconds of the latest RAW upstream observation (not the forward-filled Friday). For monthly series this can be weeks behind the headline timestamp.",
+        ),
+      frequency: zod
+        .enum(["weekly", "monthly"])
+        .describe("Publication cadence of the underlying FRED series."),
       note: zod.string().nullable(),
     }),
   ),
@@ -912,6 +937,12 @@ export const GetGliResponse = zod.object({
       }),
     )
     .describe("90-day SMA of normalizedWithM2History"),
+  m2DataThrough: zod
+    .number()
+    .nullable()
+    .describe(
+      "Unix seconds of the OLDEST raw observation across the foreign broad-money series (MYAGM2CNM189N, MYAGM3EZM196N, MYAGM3JPM189N). Those FRED series were discontinued in 2017-2019; the With-M2 line forward-fills from this date. Used to render a clear staleness warning when the M2 toggle is on.",
+    ),
   m2Available: zod
     .boolean()
     .describe(
@@ -1003,9 +1034,25 @@ export const RefreshGliResponse = zod.object({
   latestGliUsdT: zod
     .number()
     .nullable()
-    .describe("Latest Global Liquidity Index in trillions of USD"),
-  mom4wPct: zod.number().nullable().describe("4-week % change in GLI"),
+    .describe(
+      "Latest Global Liquidity Index in trillions of USD (central-bank stack only).",
+    ),
+  latestGliWithM2UsdT: zod
+    .number()
+    .nullable()
+    .describe(
+      'Latest GLI in trillions of USD with the M2\/M3 broad-money stack added — matches the \"Master Global Liquidity\" Pine recipe.',
+    ),
+  mom4wPct: zod
+    .number()
+    .nullable()
+    .describe("4-week % change in central-bank-only GLI."),
+  mom4wPctWithM2: zod
+    .number()
+    .nullable()
+    .describe("4-week % change in the With-M2 composite."),
   yoyPct: zod.number().nullable(),
+  yoyPctWithM2: zod.number().nullable(),
   roc13wAnnPct: zod
     .number()
     .nullable()
@@ -1029,8 +1076,17 @@ export const RefreshGliResponse = zod.object({
         .number()
         .nullable()
         .describe(
-          "Contribution to the latest weekly GLI delta in billions USD",
+          "Most-recent USD-billion change. For weekly series this is week-over-week; for monthly series (BoJ, PBoC) it is the latest month-over-month dollar change so the column is not stuck at $0 between monthly publishes.",
         ),
+      latestObservationTime: zod
+        .number()
+        .nullable()
+        .describe(
+          "Unix seconds of the latest RAW upstream observation (not the forward-filled Friday). For monthly series this can be weeks behind the headline timestamp.",
+        ),
+      frequency: zod
+        .enum(["weekly", "monthly"])
+        .describe("Publication cadence of the underlying FRED series."),
       note: zod.string().nullable(),
     }),
   ),
@@ -1076,6 +1132,12 @@ export const RefreshGliResponse = zod.object({
       }),
     )
     .describe("90-day SMA of normalizedWithM2History"),
+  m2DataThrough: zod
+    .number()
+    .nullable()
+    .describe(
+      "Unix seconds of the OLDEST raw observation across the foreign broad-money series (MYAGM2CNM189N, MYAGM3EZM196N, MYAGM3JPM189N). Those FRED series were discontinued in 2017-2019; the With-M2 line forward-fills from this date. Used to render a clear staleness warning when the M2 toggle is on.",
+    ),
   m2Available: zod
     .boolean()
     .describe(

@@ -944,7 +944,15 @@ components:
         weeklyContributionUsdB:
           type: number
           nullable: true
-          description: Contribution to the latest weekly GLI delta in billions USD
+          description: Most-recent USD-billion change. For weekly series this is week-over-week; for monthly series (BoJ, PBoC) it is the latest month-over-month dollar change so the column is not stuck at $0 between monthly publishes.
+        latestObservationTime:
+          type: number
+          nullable: true
+          description: Unix seconds of the latest RAW upstream observation (not the forward-filled Friday). For monthly series this can be weeks behind the headline timestamp.
+        frequency:
+          type: string
+          enum: [weekly, monthly]
+          description: Publication cadence of the underlying FRED series.
         note:
           type: string
           nullable: true
@@ -956,6 +964,8 @@ components:
         - latestUsdTrillions
         - mom4wPct
         - weeklyContributionUsdB
+        - latestObservationTime
+        - frequency
         - note
 
     GliPoint:
@@ -981,12 +991,23 @@ components:
         latestGliUsdT:
           type: number
           nullable: true
-          description: Latest Global Liquidity Index in trillions of USD
+          description: Latest Global Liquidity Index in trillions of USD (central-bank stack only).
+        latestGliWithM2UsdT:
+          type: number
+          nullable: true
+          description: Latest GLI in trillions of USD with the M2/M3 broad-money stack added — matches the "Master Global Liquidity" Pine recipe.
         mom4wPct:
           type: number
           nullable: true
-          description: 4-week % change in GLI
+          description: 4-week % change in central-bank-only GLI.
+        mom4wPctWithM2:
+          type: number
+          nullable: true
+          description: 4-week % change in the With-M2 composite.
         yoyPct:
+          type: number
+          nullable: true
+        yoyPctWithM2:
           type: number
           nullable: true
         roc13wAnnPct:
@@ -1031,6 +1052,10 @@ components:
           description: 90-day SMA of normalizedWithM2History
           items:
             $ref: "#/components/schemas/GliPoint"
+        m2DataThrough:
+          type: number
+          nullable: true
+          description: Unix seconds of the OLDEST raw observation across the foreign broad-money series (MYAGM2CNM189N, MYAGM3EZM196N, MYAGM3JPM189N). Those FRED series were discontinued in 2017-2019; the With-M2 line forward-fills from this date. Used to render a clear staleness warning when the M2 toggle is on.
         m2Available:
           type: boolean
           description: Whether the M2/M3 stack was successfully fetched and the With-M2 series are populated
@@ -1100,8 +1125,11 @@ components:
       required:
         - latestTime
         - latestGliUsdT
+        - latestGliWithM2UsdT
         - mom4wPct
+        - mom4wPctWithM2
         - yoyPct
+        - yoyPctWithM2
         - roc13wAnnPct
         - roc26wAnnPct
         - status
@@ -1117,6 +1145,7 @@ components:
         - fxNeutralHistory
         - anchorTime
         - asiaDataThrough
+        - m2DataThrough
         - rocAnn13wHistory
         - rocAnn26wHistory
         - btcHistory
