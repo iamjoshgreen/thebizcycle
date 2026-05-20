@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   useGetGli,
   useRefreshGli,
@@ -187,6 +187,8 @@ interface MainChartProps {
   btc: GliPoint[];
   recessions: NberRecessionInterval[];
   showFxNeutral: boolean;
+  xWindow: [number, number] | null;
+  onWindowChange: (w: [number, number] | null) => void;
   width?: number;
   height?: number;
 }
@@ -198,9 +200,13 @@ function MainChart({
   btc,
   recessions,
   showFxNeutral,
+  xWindow,
+  onWindowChange,
   width = 1180,
   height = 440,
 }: MainChartProps) {
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  const [drag, setDrag] = useState<{ startX: number; curX: number } | null>(null);
   if (normalized.length < 2 || btc.length < 2) {
     return (
       <div
@@ -232,13 +238,27 @@ function MainChart({
   const smaShifted = shift(normalizedSma);
   const fxShifted = showFxNeutral ? shift(fxNeutral) : [];
 
-  // X domain: from earliest BTC point to (today + 75d) so the shifted GLI
-  // reaches into the future per spec.
+  // X domain: from earliest BTC point to (today + 75d) by default; user can
+  // override via the xWindow prop (preset buttons or drag-to-zoom selection).
   const todayPlusLagSec = Math.floor(Date.now() / 1000) + lagSec;
-  const t0 = btc[0].time;
-  const t1 = todayPlusLagSec;
+  const fullT0 = btc[0].time;
+  const fullT1 = todayPlusLagSec;
+  const t0 = xWindow ? xWindow[0] : fullT0;
+  const t1 = xWindow ? xWindow[1] : fullT1;
   const span = Math.max(1, t1 - t0);
   const x = (t: number) => padL + ((t - t0) / span) * innerW;
+
+  // Inverse: SVG viewBox X → unix seconds
+  const xToTime = (vbX: number) => t0 + ((vbX - padL) / innerW) * span;
+
+  // Convert a clientX (mouse) to the SVG viewBox X coord
+  const clientToVbX = (clientX: number): number => {
+    const el = svgRef.current;
+    if (!el) return padL;
+    const rect = el.getBoundingClientRect();
+    const ratio = rect.width > 0 ? width / rect.width : 1;
+    return (clientX - rect.left) * ratio;
+  };
 
   // Left axis (linear, normalized index). Take min/max across whatever lines
   // fall inside the visible x window.
@@ -305,13 +325,45 @@ function MainChart({
   const nowSec = Math.floor(Date.now() / 1000);
   const nowX = x(nowSec);
 
+  function onMouseDown(e: React.MouseEvent<SVGSVGElement>) {
+    const vbX = clientToVbX(e.clientX);
+    if (vbX < padL || vbX > width - padR) return;
+    setDrag({ startX: vbX, curX: vbX });
+  }
+  function onMouseMove(e: React.MouseEvent<SVGSVGElement>) {
+    if (!drag) return;
+    const vbX = Math.max(padL, Math.min(width - padR, clientToVbX(e.clientX)));
+    setDrag({ ...drag, curX: vbX });
+  }
+  function onMouseUp() {
+    if (!drag) return;
+    const { startX, curX } = drag;
+    setDrag(null);
+    if (Math.abs(curX - startX) < 6) return; // treat as click
+    const a = Math.min(startX, curX);
+    const b = Math.max(startX, curX);
+    const newT0 = Math.floor(xToTime(a));
+    const newT1 = Math.ceil(xToTime(b));
+    if (newT1 - newT0 < 7 * 24 * 3600) return; // require at least one week
+    onWindowChange([newT0, newT1]);
+  }
+  function onDoubleClick() {
+    onWindowChange(null);
+  }
+
   return (
     <svg
+      ref={svgRef}
       width="100%"
       height={height}
       viewBox={`0 0 ${width} ${height}`}
       preserveAspectRatio="none"
-      style={{ display: "block" }}
+      style={{ display: "block", cursor: drag ? "ew-resize" : "crosshair", userSelect: "none" }}
+      onMouseDown={onMouseDown}
+      onMouseMove={onMouseMove}
+      onMouseUp={onMouseUp}
+      onMouseLeave={() => setDrag(null)}
+      onDoubleClick={onDoubleClick}
       data-testid="gli-chart"
     >
       {/* Recession shading */}
@@ -442,6 +494,34 @@ function MainChart({
         strokeWidth={1.4}
       />
 
+      {/* Drag-to-zoom selection rectangle */}
+      {drag && Math.abs(drag.curX - drag.startX) >= 2 && (
+        <rect
+          x={Math.min(drag.startX, drag.curX)}
+          y={padT}
+          width={Math.abs(drag.curX - drag.startX)}
+          height={innerH}
+          fill="rgba(140,180,255,0.12)"
+          stroke="rgba(140,180,255,0.5)"
+          strokeWidth={0.75}
+          pointerEvents="none"
+        />
+      )}
+
+      {/* Zoom-active hint */}
+      {xWindow && (
+        <text
+          x={width - padR - 6}
+          y={height - 10}
+          textAnchor="end"
+          fontSize={9}
+          fontFamily="'JetBrains Mono', monospace"
+          fill="rgba(140,180,255,0.7)"
+        >
+          double-click to reset zoom
+        </text>
+      )}
+
       {/* Axis labels */}
       <text
         x={padL - 8}
@@ -541,6 +621,19 @@ export default function GliPage() {
 
   const [showFxNeutral, setShowFxNeutral] = useState<boolean>(false);
   const [includeM2, setIncludeM2] = useState<boolean>(true);
+  const [xWindow, setXWindow] = useState<[number, number] | null>(null);
+
+  const setRangePreset = useCallback((years: number | null) => {
+    if (years == null) {
+      setXWindow(null);
+      return;
+    }
+    const nowSec = Math.floor(Date.now() / 1000);
+    const lagSec = 75 * 24 * 3600;
+    const t1 = nowSec + lagSec;
+    const t0 = nowSec - years * 365 * 24 * 3600;
+    setXWindow([t0, t1]);
+  }, []);
 
   const onRefresh = useCallback(async () => {
     try {
@@ -926,6 +1019,66 @@ export default function GliPage() {
               </div>
             </div>
 
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                flexWrap: "wrap",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 10,
+                  letterSpacing: "0.08em",
+                  textTransform: "uppercase",
+                  color: "rgba(180,180,200,0.5)",
+                  fontFamily: "'JetBrains Mono', monospace",
+                  marginRight: 4,
+                }}
+              >
+                Range
+              </span>
+              {([
+                ["1Y", 1],
+                ["3Y", 3],
+                ["5Y", 5],
+                ["10Y", 10],
+                ["All", null],
+              ] as Array<[string, number | null]>).map(([label, years]) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => setRangePreset(years)}
+                  data-testid={`gli-range-${label.toLowerCase()}`}
+                  style={{
+                    padding: "3px 9px",
+                    borderRadius: 6,
+                    background: xWindow == null && years == null
+                      ? "hsl(230 30% 16%)"
+                      : "transparent",
+                    border: "1px solid hsl(230 10% 18%)",
+                    color: "rgba(220,225,235,0.75)",
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 11,
+                    cursor: "pointer",
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+              <span
+                style={{
+                  marginLeft: 8,
+                  fontSize: 10,
+                  color: "rgba(180,180,200,0.45)",
+                  fontFamily: "'JetBrains Mono', monospace",
+                }}
+              >
+                drag to zoom · double-click to reset
+              </span>
+            </div>
+
             <MainChart
               normalized={
                 includeM2 && payload.m2Available
@@ -941,6 +1094,8 @@ export default function GliPage() {
               btc={payload.btcHistory}
               recessions={payload.nberRecessions}
               showFxNeutral={showFxNeutral}
+              xWindow={xWindow}
+              onWindowChange={setXWindow}
             />
             <div
               style={{
