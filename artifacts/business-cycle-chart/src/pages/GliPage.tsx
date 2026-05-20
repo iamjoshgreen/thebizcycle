@@ -434,20 +434,12 @@ function MainChart({
         />
       )}
 
-      {/* GLI (thin white) */}
+      {/* GLI (white) */}
       <path
         d={gliPath}
         fill="none"
-        stroke="rgba(245,245,250,0.85)"
-        strokeWidth={1}
-      />
-
-      {/* 90d SMA (yellow, smoother + thicker) */}
-      <path
-        d={smaPath}
-        fill="none"
-        stroke="hsl(48 95% 60%)"
-        strokeWidth={2}
+        stroke="rgba(245,245,250,0.95)"
+        strokeWidth={1.4}
       />
 
       {/* Axis labels */}
@@ -859,17 +851,6 @@ export default function GliPage() {
                     }}
                   />
                   GLI (norm.)
-                </span>
-                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                  <span
-                    style={{
-                      display: "inline-block",
-                      width: 14,
-                      height: 2,
-                      background: "hsl(48 95% 60%)",
-                    }}
-                  />
-                  90d SMA
                 </span>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                   <span
