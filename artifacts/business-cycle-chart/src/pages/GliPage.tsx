@@ -184,11 +184,15 @@ interface MainChartProps {
   spx: GliPoint[];
   recessions: NberRecessionInterval[];
   lagDays: number;
+  showBtc: boolean;
+  showSpx: boolean;
   width?: number;
   height?: number;
 }
 
-function MainChart({ gli, btc, spx, recessions, lagDays, width = 1180, height = 380 }: MainChartProps) {
+function MainChart({ gli, btc, spx, recessions, lagDays, showBtc, showSpx, width = 1180, height = 380 }: MainChartProps) {
+  const btcVisible = showBtc ? btc : [];
+  const spxVisible = showSpx ? spx : [];
   if (gli.length < 2) {
     return (
       <div
@@ -217,12 +221,12 @@ function MainChart({ gli, btc, spx, recessions, lagDays, width = 1180, height = 
   const lagSec = lagDays * 24 * 3600;
   const gliShifted = gli.map((p) => ({ time: p.time + lagSec, value: p.value }));
 
-  // X domain: union of price series (BTC starts later, so use min(BTC start, gliShifted start))
+  // X domain: union of visible price series
   const allTimes = [
     gliShifted[0].time,
     gliShifted[gliShifted.length - 1].time,
-    ...(btc.length > 0 ? [btc[0].time, btc[btc.length - 1].time] : []),
-    ...(spx.length > 0 ? [spx[0].time, spx[spx.length - 1].time] : []),
+    ...(btcVisible.length > 0 ? [btcVisible[0].time, btcVisible[btcVisible.length - 1].time] : []),
+    ...(spxVisible.length > 0 ? [spxVisible[0].time, spxVisible[spxVisible.length - 1].time] : []),
   ];
   const t0 = Math.min(...allTimes);
   const t1 = Math.max(...allTimes);
@@ -250,8 +254,8 @@ function MainChart({ gli, btc, spx, recessions, lagDays, width = 1180, height = 
       return padT + (1 - (lv - mn) / Math.max(0.0001, mx - mn)) * innerH;
     };
   }
-  const yBtc = logNorm(btc);
-  const ySpx = logNorm(spx);
+  const yBtc = logNorm(btcVisible);
+  const ySpx = logNorm(spxVisible);
 
   function pathFor(series: GliPoint[], yFn: (v: number) => number): string {
     return series
@@ -261,8 +265,8 @@ function MainChart({ gli, btc, spx, recessions, lagDays, width = 1180, height = 
   }
 
   const gliPath = pathFor(gliShifted, yGli);
-  const btcPath = pathFor(btc, yBtc);
-  const spxPath = pathFor(spx, ySpx);
+  const btcPath = pathFor(btcVisible, yBtc);
+  const spxPath = pathFor(spxVisible, ySpx);
 
   // Y-axis ticks for GLI
   const yTicks: number[] = [];
@@ -347,12 +351,12 @@ function MainChart({ gli, btc, spx, recessions, lagDays, width = 1180, height = 
       ))}
 
       {/* SPX path */}
-      {spx.length > 1 && (
+      {spxVisible.length > 1 && (
         <path d={spxPath} fill="none" stroke="rgba(180,180,200,0.45)" strokeWidth={1.2} />
       )}
 
       {/* BTC path */}
-      {btc.length > 1 && (
+      {btcVisible.length > 1 && (
         <path d={btcPath} fill="none" stroke="rgba(247,147,26,0.85)" strokeWidth={1.4} />
       )}
 
@@ -360,15 +364,17 @@ function MainChart({ gli, btc, spx, recessions, lagDays, width = 1180, height = 
       <path d={gliPath} fill="none" stroke="hsl(195 90% 65%)" strokeWidth={2} />
 
       {/* Right axis label */}
-      <text
-        x={width - padR + 8}
-        y={padT + 12}
-        fontSize={10}
-        fontFamily="'JetBrains Mono', monospace"
-        fill="rgba(247,147,26,0.85)"
-      >
-        BTC / SPX (log)
-      </text>
+      {(showBtc || showSpx) && (
+        <text
+          x={width - padR + 8}
+          y={padT + 12}
+          fontSize={10}
+          fontFamily="'JetBrains Mono', monospace"
+          fill="rgba(247,147,26,0.85)"
+        >
+          {showBtc && showSpx ? "BTC / SPX (log)" : showBtc ? "BTC (log)" : "SPX (log)"}
+        </text>
+      )}
     </svg>
   );
 }
@@ -446,6 +452,8 @@ export default function GliPage() {
   const noData = !isLoading && !payload;
 
   const [lagDays, setLagDays] = useState<number>(payload?.defaultLagDays ?? 75);
+  const [showBtc, setShowBtc] = useState<boolean>(true);
+  const [showSpx, setShowSpx] = useState<boolean>(true);
 
   const onRefresh = useCallback(async () => {
     try {
@@ -580,7 +588,7 @@ export default function GliPage() {
                   }}
                   data-testid="gli-title"
                 >
-                  Fed (net of TGA + RRP) + ECB + BoJ, in USD
+                  Fed (net of TGA + RRP) + ECB + BoJ + PBoC, in USD
                 </div>
                 <div
                   style={{
@@ -732,32 +740,70 @@ export default function GliPage() {
                   />
                   GLI (left)
                 </span>
-                <span>
+                <button
+                  type="button"
+                  onClick={() => setShowBtc((v) => !v)}
+                  data-testid="gli-toggle-btc"
+                  title={showBtc ? "Hide BTC" : "Show BTC"}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    padding: "2px 4px",
+                    cursor: "pointer",
+                    color: showBtc
+                      ? "rgba(247,147,26,0.95)"
+                      : "rgba(247,147,26,0.4)",
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 11,
+                    textDecoration: showBtc ? "none" : "line-through",
+                  }}
+                >
                   <span
                     style={{
                       display: "inline-block",
                       width: 14,
                       height: 2,
-                      background: "rgba(247,147,26,0.85)",
+                      background: showBtc
+                        ? "rgba(247,147,26,0.85)"
+                        : "rgba(247,147,26,0.35)",
                       marginRight: 6,
                       verticalAlign: "middle",
                     }}
                   />
                   BTC (right, log)
-                </span>
-                <span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowSpx((v) => !v)}
+                  data-testid="gli-toggle-spx"
+                  title={showSpx ? "Hide S&P 500" : "Show S&P 500"}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    padding: "2px 4px",
+                    cursor: "pointer",
+                    color: showSpx
+                      ? "rgba(220,225,235,0.85)"
+                      : "rgba(180,180,200,0.4)",
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 11,
+                    textDecoration: showSpx ? "none" : "line-through",
+                  }}
+                >
                   <span
                     style={{
                       display: "inline-block",
                       width: 14,
                       height: 2,
-                      background: "rgba(180,180,200,0.45)",
+                      background: showSpx
+                        ? "rgba(180,180,200,0.45)"
+                        : "rgba(180,180,200,0.2)",
                       marginRight: 6,
                       verticalAlign: "middle",
                     }}
                   />
                   S&P 500 (right, log)
-                </span>
+                </button>
               </div>
             </div>
 
@@ -833,6 +879,8 @@ export default function GliPage() {
               spx={payload.spxHistory}
               recessions={payload.nberRecessions}
               lagDays={lagDays}
+              showBtc={showBtc}
+              showSpx={showSpx}
             />
           </section>
 
@@ -1146,8 +1194,8 @@ export default function GliPage() {
               textAlign: "right",
             }}
           >
-            Data: FRED (WALCL, WTREGEN, RRPONTSYD, ECBASSETSW, JPNASSETS, DEXUSEU,
-            DEXJPUS, DTWEXBGS) + Yahoo (BTC-USD, ^GSPC) ·{" "}
+            Data: FRED (WALCL, WTREGEN, RRPONTSYD, ECBASSETSW, JPNASSETS,
+            TRESEGCNM052N, DEXUSEU, DEXJPUS, DTWEXBGS) + Yahoo (BTC-USD, ^GSPC) ·{" "}
             {payload.lastUpdated ? `updated ${fmtTimestamp(payload.lastUpdated)}` : ""}
           </div>
         </div>

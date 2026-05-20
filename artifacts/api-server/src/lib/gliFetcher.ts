@@ -272,18 +272,14 @@ const COMPONENTS: ComponentSpec[] = [
     toUsdB: (v, { usdPerJpy }) => (usdPerJpy == null ? null : v * 0.1 * usdPerJpy),
   },
   {
-    id: "boe",
-    label: "Bank of England",
-    series: "—",
-    toUsdB: () => null,
-    unavailableNote: "No reliable free weekly series on FRED. Excluded from v1 — UK-domiciled liquidity is omitted.",
-  },
-  {
     id: "pboc",
-    label: "People's Bank of China",
-    series: "—",
-    toUsdB: () => null,
-    unavailableNote: "PBoC balance sheet not on FRED. Excluded from v1 — developed-market GLI shown.",
+    label: "PBoC (FX reserves proxy)",
+    series: "TRESEGCNM052N",
+    // TRESEGCNM052N: Total Reserves excl. Gold for China, millions USD → /1000 → $B.
+    // This is not the full PBoC balance sheet (~$6T) — FX reserves are ~$3.5T of it —
+    // but it is the only reliable free active series and captures the FX-reserves
+    // component of PBoC liquidity. The domestic-easing tools (MLF/PSL) are not in it.
+    toUsdB: (v) => v / 1000,
   },
 ];
 
@@ -352,13 +348,14 @@ function dxyBlurbFor(
 export async function fetchGliPayload(): Promise<GliPayload> {
   const notes: string[] = [];
 
-  // Fetch all FRED series we need in parallel (BoE/PBoC stubbed out in v1)
+  // Fetch all FRED series we need in parallel.
   const [
     walcl,    // Fed total assets (millions USD, weekly)
     wtregen,  // TGA (millions USD, weekly)
     rrp,      // RRPONTSYD (billions USD, daily)
     ecb,      // ECBASSETSW (millions EUR, weekly)
     boj,      // JPNASSETS (100M JPY units, monthly)
+    pboc,     // TRESEGCNM052N: China FX reserves (millions USD, monthly)
     dexusEu,  // DEXUSEU: USD per 1 EUR (daily)
     dexjpUs,  // DEXJPUS: JPY per 1 USD (daily)
     dxy,      // DTWEXBGS: nominal broad USD index (daily)
@@ -369,6 +366,7 @@ export async function fetchGliPayload(): Promise<GliPayload> {
     tryFetchFred("RRPONTSYD"),
     tryFetchFred("ECBASSETSW"),
     tryFetchFred("JPNASSETS"),
+    tryFetchFred("TRESEGCNM052N"),
     tryFetchFred("DEXUSEU"),
     tryFetchFred("DEXJPUS"),
     tryFetchFred("DTWEXBGS"),
@@ -380,14 +378,17 @@ export async function fetchGliPayload(): Promise<GliPayload> {
   if (!rrp) notes.push("Missing FRED series RRPONTSYD (Overnight RRP)");
   if (!ecb) notes.push("Missing FRED series ECBASSETSW (ECB total assets)");
   if (!boj) notes.push("Missing FRED series JPNASSETS (BoJ total assets)");
+  if (!pboc) notes.push("Missing FRED series TRESEGCNM052N (China FX reserves)");
   if (!dexusEu) notes.push("Missing FRED series DEXUSEU (USD/EUR)");
   if (!dexjpUs) notes.push("Missing FRED series DEXJPUS (JPY/USD)");
   if (!dxy) notes.push("Missing FRED series DTWEXBGS (broad USD index)");
 
-  // v1 stance on BoE / PBoC: surface as unavailable with a clear note.
-  for (const c of COMPONENTS) {
-    if (c.unavailableNote) notes.push(`${c.label}: ${c.unavailableNote}`);
-  }
+  // Transparency note: PBoC is a partial proxy (FX reserves only, not the full
+  // balance sheet). It captures roughly $3.5T of ~$6T total — the domestic
+  // easing tools (MLF/PSL) are not included. UK liquidity (BoE) is not in v1.
+  notes.push(
+    "PBoC component is China FX reserves (TRESEGCNM052N) — the only reliable free active series. It tracks the FX-reserve component of PBoC liquidity (~$3.5T) but understates domestic easing tools (MLF / PSL). BoE is not included.",
+  );
 
   // Friday weekly grid. We start the chart at OBS_START and end at the
   // most recent completed Friday.
@@ -396,10 +397,11 @@ export async function fetchGliPayload(): Promise<GliPayload> {
 
   // Forward-fill all series onto the Friday grid.
   const walclFf = forwardFill(walcl, fridays);   // millions USD
-  const wtregenFf = forwardFill(wtregen, fridays); // $B
+  const wtregenFf = forwardFill(wtregen, fridays); // millions USD
   const rrpFf = forwardFill(rrp, fridays);         // $B
   const ecbFf = forwardFill(ecb, fridays);         // millions EUR
-  const bojFf = forwardFill(boj, fridays);         // millions JPY
+  const bojFf = forwardFill(boj, fridays);         // 100M JPY units
+  const pbocFf = forwardFill(pboc, fridays);       // millions USD
   const dexUsEuFf = forwardFill(dexusEu, fridays); // USD per EUR
   const dexJpUsFf = forwardFill(dexjpUs, fridays); // JPY per USD
   const dxyFf = forwardFill(dxy, fridays);         // index
@@ -408,6 +410,7 @@ export async function fetchGliPayload(): Promise<GliPayload> {
   const fedUsdB = new Map<number, number>();
   const ecbUsdB = new Map<number, number>();
   const bojUsdB = new Map<number, number>();
+  const pbocUsdB = new Map<number, number>();
   const gli = new Map<number, number>(); // billions USD
 
   for (const friday of fridays) {
@@ -417,28 +420,33 @@ export async function fetchGliPayload(): Promise<GliPayload> {
     const rrpV = rrpFf.get(ts);
     const ecbMEur = ecbFf.get(ts);
     const bojMJpy = bojFf.get(ts);
+    const pbocMUsd = pbocFf.get(ts);
     const usdPerEur = dexUsEuFf.get(ts) ?? null;
     const dexJpy = dexJpUsFf.get(ts) ?? null;
     const usdPerJpy = dexJpy && dexJpy > 0 ? 1 / dexJpy : null;
 
-    // Need all of Fed, ECB, BoJ + FX to publish a GLI print for that week.
+    // Need all of Fed, ECB, BoJ, PBoC + FX to publish a GLI print for that week.
     if (walclMUsd == null || tga == null || rrpV == null) continue;
     if (ecbMEur == null || usdPerEur == null) continue;
     if (bojMJpy == null || usdPerJpy == null) continue;
+    if (pbocMUsd == null) continue;
 
     // Unit conversion to billions USD:
     //   WALCL, WTREGEN: millions USD → /1000 → $B
     //   RRPONTSYD: already $B
     //   ECBASSETSW: millions EUR → /1000 → $B EUR → × usdPerEur
     //   JPNASSETS: 100M yen units → × 0.1 → $B yen → × usdPerJpy
+    //   TRESEGCNM052N: millions USD → /1000 → $B (already USD-denominated)
     const fed = walclMUsd / 1000 - tga / 1000 - rrpV; // $B
     const ecbU = (ecbMEur / 1000) * usdPerEur;        // $B
     const bojU = bojMJpy * 0.1 * usdPerJpy;           // $B
+    const pbocU = pbocMUsd / 1000;                    // $B
 
     fedUsdB.set(ts, fed);
     ecbUsdB.set(ts, ecbU);
     bojUsdB.set(ts, bojU);
-    gli.set(ts, fed + ecbU + bojU);
+    pbocUsdB.set(ts, pbocU);
+    gli.set(ts, fed + ecbU + bojU + pbocU);
   }
 
   const gliHistory: GliPoint[] = Array.from(gli.entries())
@@ -530,8 +538,7 @@ export async function fetchGliPayload(): Promise<GliPayload> {
     summarizeComponent(COMPONENTS[0], fedUsdB),
     summarizeComponent(COMPONENTS[1], ecbUsdB),
     summarizeComponent(COMPONENTS[2], bojUsdB),
-    summarizeComponent(COMPONENTS[3], new Map()),
-    summarizeComponent(COMPONENTS[4], new Map()),
+    summarizeComponent(COMPONENTS[3], pbocUsdB),
   ];
 
   // DXY: weekly history + latest + 13w change
@@ -597,6 +604,7 @@ export async function fetchGliPayload(): Promise<GliPayload> {
     !rrp ||
     !ecb ||
     !boj ||
+    !pboc ||
     !dexusEu ||
     !dexjpUs ||
     !dxy ||
