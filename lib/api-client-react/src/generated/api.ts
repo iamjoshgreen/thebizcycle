@@ -17,6 +17,7 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  BtcQuantilePayload,
   ChartPayload,
   CyclicalPayload,
   GliPayload,
@@ -1051,4 +1052,161 @@ export const useRefreshGli = <
   TContext
 > => {
   return useMutation(getRefreshGliMutationOptions(options));
+};
+
+/**
+ * Pure database SELECT. Returns 404 if no row has ever been written for this indicator.
+ * @summary Get BTC asymmetric quantile band payload from the database
+ */
+export const getGetBtcQuantileUrl = () => {
+  return `/api/btc-quantile`;
+};
+
+export const getBtcQuantile = async (
+  options?: RequestInit,
+): Promise<BtcQuantilePayload> => {
+  return customFetch<BtcQuantilePayload>(getGetBtcQuantileUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetBtcQuantileQueryKey = () => {
+  return [`/api/btc-quantile`] as const;
+};
+
+export const getGetBtcQuantileQueryOptions = <
+  TData = Awaited<ReturnType<typeof getBtcQuantile>>,
+  TError = ErrorType<NoDataError>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getBtcQuantile>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetBtcQuantileQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getBtcQuantile>>> = ({
+    signal,
+  }) => getBtcQuantile({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getBtcQuantile>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetBtcQuantileQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getBtcQuantile>>
+>;
+export type GetBtcQuantileQueryError = ErrorType<NoDataError>;
+
+/**
+ * @summary Get BTC asymmetric quantile band payload from the database
+ */
+
+export function useGetBtcQuantile<
+  TData = Awaited<ReturnType<typeof getBtcQuantile>>,
+  TError = ErrorType<NoDataError>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getBtcQuantile>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetBtcQuantileQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Force refresh BTC quantile band data
+ */
+export const getRefreshBtcQuantileUrl = () => {
+  return `/api/btc-quantile/refresh`;
+};
+
+export const refreshBtcQuantile = async (
+  options?: RequestInit,
+): Promise<BtcQuantilePayload> => {
+  return customFetch<BtcQuantilePayload>(getRefreshBtcQuantileUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRefreshBtcQuantileMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof refreshBtcQuantile>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof refreshBtcQuantile>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["refreshBtcQuantile"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof refreshBtcQuantile>>,
+    void
+  > = () => {
+    return refreshBtcQuantile(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RefreshBtcQuantileMutationResult = NonNullable<
+  Awaited<ReturnType<typeof refreshBtcQuantile>>
+>;
+
+export type RefreshBtcQuantileMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Force refresh BTC quantile band data
+ */
+export const useRefreshBtcQuantile = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof refreshBtcQuantile>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof refreshBtcQuantile>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getRefreshBtcQuantileMutationOptions(options));
 };

@@ -479,3 +479,62 @@ export interface GliPayload {
   notes: string[];
   lastUpdated: number;
 }
+
+/**
+ * One time point in the BTC quantile band series. price is null for projection points beyond the last historical observation.
+ */
+export interface BtcQuantilePoint {
+  /** Unix seconds (Friday weekly grid) */
+  time: number;
+  /** Actual BTC-USD close price; null for projection points */
+  price: number | null;
+  /** q=0.10 band price (linear power law) */
+  lower: number;
+  /** q=0.50 band price (linear power law) */
+  median: number;
+  /** q=0.90 band price (quadratic — compresses inward over time) */
+  upper: number;
+}
+
+/**
+ * A historical Bitcoin cycle peak and its position relative to the quantile bands.
+ */
+export interface BtcCyclePeak {
+  /** Unix seconds of the peak */
+  time: number;
+  /** Actual BTC price at the peak */
+  price: number;
+  /** Human-readable label e.g. "2021 Peak" */
+  label: string;
+  /** Upper band (q=0.90) value at the time of the peak */
+  upperBand: number;
+  /** price / upperBand — fraction of the upper band the peak reached (diminishing across cycles) */
+  pctOfUpper: number;
+}
+
+export interface BtcQuantilePayload {
+  /** Weekly series of price + band values, historical then 2-year projection */
+  series: BtcQuantilePoint[];
+  /** Known cycle peaks with their band context */
+  cyclePeaks: BtcCyclePeak[];
+  /** Latest BTC-USD weekly close */
+  currentPrice: number | null;
+  /** q=0.10 band at the latest data point */
+  currentLower: number | null;
+  /** q=0.50 band at the latest data point */
+  currentMedian: number | null;
+  /** q=0.90 band at the latest data point */
+  currentUpper: number | null;
+  /** Current price position between lower and upper band, 0-100 */
+  currentPercentile: number | null;
+  /** Linear quantile regression coefficients [intercept, slope] in log-log space for q=0.10 */
+  lowerCoeffs: number[];
+  /** Linear quantile regression coefficients [intercept, slope] in log-log space for q=0.50 */
+  medianCoeffs: number[];
+  /** Quadratic quantile regression coefficients [intercept, slope, curvature] in log-log space for q=0.90 */
+  upperCoeffs: number[];
+  /** Plain-English description of the model, its assumptions, and its limits */
+  modelNote: string;
+  /** Unix seconds when this data was last refreshed */
+  lastUpdated: number;
+}

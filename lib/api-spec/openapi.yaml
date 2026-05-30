@@ -231,6 +231,39 @@ paths:
               schema:
                 $ref: "#/components/schemas/GliPayload"
 
+  /btc-quantile:
+    get:
+      operationId: getBtcQuantile
+      tags: [btcQuantile]
+      summary: Get BTC asymmetric quantile band payload from the database
+      description: Pure database SELECT. Returns 404 if no row has ever been written for this indicator.
+      responses:
+        "200":
+          description: BTC Quantile payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BtcQuantilePayload"
+        "404":
+          description: No data has been saved for this indicator yet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NoDataError"
+
+  /btc-quantile/refresh:
+    post:
+      operationId: refreshBtcQuantile
+      tags: [btcQuantile]
+      summary: Force refresh BTC quantile band data
+      responses:
+        "200":
+          description: Refreshed BTC Quantile payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BtcQuantilePayload"
+
 components:
   schemas:
     NoDataError:
@@ -1159,4 +1192,115 @@ components:
         - lagPresets
         - partialData
         - notes
+        - lastUpdated
+
+    BtcQuantilePoint:
+      type: object
+      description: One time point in the BTC quantile band series. price is null for projection points beyond the last historical observation.
+      properties:
+        time:
+          type: number
+          description: Unix seconds (Friday weekly grid)
+        price:
+          type: number
+          nullable: true
+          description: Actual BTC-USD close price; null for projection points
+        lower:
+          type: number
+          description: q=0.10 band price (linear power law)
+        median:
+          type: number
+          description: q=0.50 band price (linear power law)
+        upper:
+          type: number
+          description: q=0.90 band price (quadratic — compresses inward over time)
+      required: [time, price, lower, median, upper]
+
+    BtcCyclePeak:
+      type: object
+      description: A historical Bitcoin cycle peak and its position relative to the quantile bands.
+      properties:
+        time:
+          type: number
+          description: Unix seconds of the peak
+        price:
+          type: number
+          description: Actual BTC price at the peak
+        label:
+          type: string
+          description: Human-readable label e.g. "2021 Peak"
+        upperBand:
+          type: number
+          description: Upper band (q=0.90) value at the time of the peak
+        pctOfUpper:
+          type: number
+          description: price / upperBand — fraction of the upper band the peak reached (diminishing across cycles)
+      required: [time, price, label, upperBand, pctOfUpper]
+
+    BtcQuantilePayload:
+      type: object
+      properties:
+        series:
+          type: array
+          description: Weekly series of price + band values, historical then 2-year projection
+          items:
+            $ref: "#/components/schemas/BtcQuantilePoint"
+        cyclePeaks:
+          type: array
+          description: Known cycle peaks with their band context
+          items:
+            $ref: "#/components/schemas/BtcCyclePeak"
+        currentPrice:
+          type: number
+          nullable: true
+          description: Latest BTC-USD weekly close
+        currentLower:
+          type: number
+          nullable: true
+          description: q=0.10 band at the latest data point
+        currentMedian:
+          type: number
+          nullable: true
+          description: q=0.50 band at the latest data point
+        currentUpper:
+          type: number
+          nullable: true
+          description: q=0.90 band at the latest data point
+        currentPercentile:
+          type: number
+          nullable: true
+          description: Current price position between lower and upper band, 0-100
+        lowerCoeffs:
+          type: array
+          description: Linear quantile regression coefficients [intercept, slope] in log-log space for q=0.10
+          items:
+            type: number
+        medianCoeffs:
+          type: array
+          description: Linear quantile regression coefficients [intercept, slope] in log-log space for q=0.50
+          items:
+            type: number
+        upperCoeffs:
+          type: array
+          description: Quadratic quantile regression coefficients [intercept, slope, curvature] in log-log space for q=0.90
+          items:
+            type: number
+        modelNote:
+          type: string
+          description: Plain-English description of the model, its assumptions, and its limits
+        lastUpdated:
+          type: number
+          description: Unix seconds when this data was last refreshed
+      required:
+        - series
+        - cyclePeaks
+        - currentPrice
+        - currentLower
+        - currentMedian
+        - currentUpper
+        - currentPercentile
+        - lowerCoeffs
+        - medianCoeffs
+        - upperCoeffs
+        - modelNote
         - lastUpdated

@@ -74,6 +74,7 @@ const TABS: { path: string; label: string; short: string }[] = [
   { path: "/recession", label: "Recession", short: "Recess." },
   { path: "/cyclical", label: "Cyclical GDP", short: "GDP" },
   { path: "/gli", label: "Global Liquidity", short: "GLI" },
+  { path: "/btc-quantile", label: "BTC Quantile", short: "BTC Q" },
 ];
 
 function formatTimestamp(unix: number): string {

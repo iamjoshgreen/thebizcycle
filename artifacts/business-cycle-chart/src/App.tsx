@@ -9,6 +9,7 @@ import HousingPage from "@/pages/HousingPage";
 import RecessionPage from "@/pages/RecessionPage";
 import CyclicalPage from "@/pages/CyclicalPage";
 import GliPage from "@/pages/GliPage";
+import BtcQuantilePage from "@/pages/BtcQuantilePage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -31,6 +32,7 @@ function Router() {
       <Route path="/recession" component={RecessionPage} />
       <Route path="/cyclical" component={CyclicalPage} />
       <Route path="/gli" component={GliPage} />
+      <Route path="/btc-quantile" component={BtcQuantilePage} />
     </Switch>
   );
 }

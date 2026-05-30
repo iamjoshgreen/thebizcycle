@@ -1220,3 +1220,190 @@ export const RefreshGliResponse = zod.object({
   notes: zod.array(zod.string()),
   lastUpdated: zod.number(),
 });
+
+/**
+ * Pure database SELECT. Returns 404 if no row has ever been written for this indicator.
+ * @summary Get BTC asymmetric quantile band payload from the database
+ */
+export const GetBtcQuantileResponse = zod.object({
+  series: zod
+    .array(
+      zod
+        .object({
+          time: zod.number().describe("Unix seconds (Friday weekly grid)"),
+          price: zod
+            .number()
+            .nullable()
+            .describe("Actual BTC-USD close price; null for projection points"),
+          lower: zod.number().describe("q=0.10 band price (linear power law)"),
+          median: zod.number().describe("q=0.50 band price (linear power law)"),
+          upper: zod
+            .number()
+            .describe(
+              "q=0.90 band price (quadratic — compresses inward over time)",
+            ),
+        })
+        .describe(
+          "One time point in the BTC quantile band series. price is null for projection points beyond the last historical observation.",
+        ),
+    )
+    .describe(
+      "Weekly series of price + band values, historical then 2-year projection",
+    ),
+  cyclePeaks: zod
+    .array(
+      zod
+        .object({
+          time: zod.number().describe("Unix seconds of the peak"),
+          price: zod.number().describe("Actual BTC price at the peak"),
+          label: zod
+            .string()
+            .describe('Human-readable label e.g. \"2021 Peak\"'),
+          upperBand: zod
+            .number()
+            .describe("Upper band (q=0.90) value at the time of the peak"),
+          pctOfUpper: zod
+            .number()
+            .describe(
+              "price \/ upperBand — fraction of the upper band the peak reached (diminishing across cycles)",
+            ),
+        })
+        .describe(
+          "A historical Bitcoin cycle peak and its position relative to the quantile bands.",
+        ),
+    )
+    .describe("Known cycle peaks with their band context"),
+  currentPrice: zod.number().nullable().describe("Latest BTC-USD weekly close"),
+  currentLower: zod
+    .number()
+    .nullable()
+    .describe("q=0.10 band at the latest data point"),
+  currentMedian: zod
+    .number()
+    .nullable()
+    .describe("q=0.50 band at the latest data point"),
+  currentUpper: zod
+    .number()
+    .nullable()
+    .describe("q=0.90 band at the latest data point"),
+  currentPercentile: zod
+    .number()
+    .nullable()
+    .describe("Current price position between lower and upper band, 0-100"),
+  lowerCoeffs: zod
+    .array(zod.number())
+    .describe(
+      "Linear quantile regression coefficients [intercept, slope] in log-log space for q=0.10",
+    ),
+  medianCoeffs: zod
+    .array(zod.number())
+    .describe(
+      "Linear quantile regression coefficients [intercept, slope] in log-log space for q=0.50",
+    ),
+  upperCoeffs: zod
+    .array(zod.number())
+    .describe(
+      "Quadratic quantile regression coefficients [intercept, slope, curvature] in log-log space for q=0.90",
+    ),
+  modelNote: zod
+    .string()
+    .describe(
+      "Plain-English description of the model, its assumptions, and its limits",
+    ),
+  lastUpdated: zod
+    .number()
+    .describe("Unix seconds when this data was last refreshed"),
+});
+
+/**
+ * @summary Force refresh BTC quantile band data
+ */
+export const RefreshBtcQuantileResponse = zod.object({
+  series: zod
+    .array(
+      zod
+        .object({
+          time: zod.number().describe("Unix seconds (Friday weekly grid)"),
+          price: zod
+            .number()
+            .nullable()
+            .describe("Actual BTC-USD close price; null for projection points"),
+          lower: zod.number().describe("q=0.10 band price (linear power law)"),
+          median: zod.number().describe("q=0.50 band price (linear power law)"),
+          upper: zod
+            .number()
+            .describe(
+              "q=0.90 band price (quadratic — compresses inward over time)",
+            ),
+        })
+        .describe(
+          "One time point in the BTC quantile band series. price is null for projection points beyond the last historical observation.",
+        ),
+    )
+    .describe(
+      "Weekly series of price + band values, historical then 2-year projection",
+    ),
+  cyclePeaks: zod
+    .array(
+      zod
+        .object({
+          time: zod.number().describe("Unix seconds of the peak"),
+          price: zod.number().describe("Actual BTC price at the peak"),
+          label: zod
+            .string()
+            .describe('Human-readable label e.g. \"2021 Peak\"'),
+          upperBand: zod
+            .number()
+            .describe("Upper band (q=0.90) value at the time of the peak"),
+          pctOfUpper: zod
+            .number()
+            .describe(
+              "price \/ upperBand — fraction of the upper band the peak reached (diminishing across cycles)",
+            ),
+        })
+        .describe(
+          "A historical Bitcoin cycle peak and its position relative to the quantile bands.",
+        ),
+    )
+    .describe("Known cycle peaks with their band context"),
+  currentPrice: zod.number().nullable().describe("Latest BTC-USD weekly close"),
+  currentLower: zod
+    .number()
+    .nullable()
+    .describe("q=0.10 band at the latest data point"),
+  currentMedian: zod
+    .number()
+    .nullable()
+    .describe("q=0.50 band at the latest data point"),
+  currentUpper: zod
+    .number()
+    .nullable()
+    .describe("q=0.90 band at the latest data point"),
+  currentPercentile: zod
+    .number()
+    .nullable()
+    .describe("Current price position between lower and upper band, 0-100"),
+  lowerCoeffs: zod
+    .array(zod.number())
+    .describe(
+      "Linear quantile regression coefficients [intercept, slope] in log-log space for q=0.10",
+    ),
+  medianCoeffs: zod
+    .array(zod.number())
+    .describe(
+      "Linear quantile regression coefficients [intercept, slope] in log-log space for q=0.50",
+    ),
+  upperCoeffs: zod
+    .array(zod.number())
+    .describe(
+      "Quadratic quantile regression coefficients [intercept, slope, curvature] in log-log space for q=0.90",
+    ),
+  modelNote: zod
+    .string()
+    .describe(
+      "Plain-English description of the model, its assumptions, and its limits",
+    ),
+  lastUpdated: zod
+    .number()
+    .describe("Unix seconds when this data was last refreshed"),
+});
