@@ -418,7 +418,7 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
       </div>
 
       <div ref={wrapRef} style={{ userSelect: "none", touchAction: "none" }}>
-      <ResponsiveContainer width="100%" height={500}>
+      <ResponsiveContainer width="100%" height={900}>
         <ComposedChart
           data={chartData}
           margin={{ top: 10, right: 8, bottom: 28, left: 8 }}
