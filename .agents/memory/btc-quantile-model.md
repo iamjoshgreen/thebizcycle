@@ -32,11 +32,11 @@ Q1≈$687, Q50≈$1637, Q99≈$10666; mid-2026 (x≈0.765) → Q1≈$62K, Q10≈
 Q99≈$197K. Projection runs 2 years past the last data point (price=null on projected rows).
 
 **Recharts note:** golden zone is a ranged `<Area>` whose dataKey value is a tuple
-`[disl4, disl1]`. X-axis is LINEAR calendar time in ms (`dataKey="t"`, `type="number"`,
-`scale="linear"`) — NOT log-time; the `ln(t)` term in the model is what bends the bands
-into the concave fan when drawn against linear time (matches the paper's Figure 1).
-Y-axis is `scale="log"`, mirrored on left + right (two `<YAxis>` with `yAxisId` left/right,
-so every series/reference element needs an explicit `yAxisId`). Drag-to-zoom: capture
-`e.activeLabel` (coerce via `Number()` — Recharts may emit it as a string) into ref
-state, commit `[min,max]` to a zoom tuple; x-ticks are adaptive (years→quarters→months)
-and the y-domain auto-fits to the data inside the zoom window.
+`[disl4, disl1]`. X-axis is LINEAR calendar time in ms — NOT log-time; the `ln(t)` term
+in the model is what bends the bands into the concave fan when drawn against linear time
+(matches the paper's Figure 1). Price axis is `scale="log"` and lives on the RIGHT only
+(user explicitly rejected a left price axis). Zoom is a native `<Brush>` (the reliable
+choice — the earlier `activeLabel` drag-to-zoom was fragile/non-working); the brushed
+index window drives the visible range, the y-domain auto-fit, and the adaptive x-ticks
+(years→quarters→months as you zoom in). **Why:** keep these UX decisions consistent if
+the chart is revisited — right-side price + Brush were specific user requests.
