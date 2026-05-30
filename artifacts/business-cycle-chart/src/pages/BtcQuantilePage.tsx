@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   useGetBtcQuantile,
   useRefreshBtcQuantile,
@@ -20,7 +20,6 @@ import {
   ReferenceArea,
   ResponsiveContainer,
   Tooltip,
-  Brush,
 } from "recharts";
 import TopBar from "@/components/TopBar";
 import { useToast } from "@/hooks/use-toast";
@@ -108,6 +107,7 @@ const MON = [
 ];
 
 const DAY_MS = 86_400_000;
+const MIN_ZOOM_SPAN = 21 * DAY_MS; // don't let the wheel zoom tighter than ~3 weeks
 
 // Adaptive x-axis ticks: the deeper the zoom, the finer the time markers
 // (years → half-years → quarters → months). Returns ticks (ms) + a label fmt.
@@ -218,7 +218,58 @@ type ChartDatum = {
 function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
   const mono = "'JetBrains Mono', monospace";
   const nowSec = Math.floor(Date.now() / 1000);
-  const [brush, setBrush] = useState<{ startIndex: number; endIndex: number } | null>(null);
+  const [zoom, setZoom] = useState<[number, number] | null>(null);
+  const [refLeft, setRefLeft] = useState<number | null>(null);
+  const [refRight, setRefRight] = useState<number | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const hoverMsRef = useRef<number | null>(null);
+  const zoomRef = useRef<[number, number] | null>(null);
+  const boundsRef = useRef<{ xMin: number; xMax: number }>({ xMin: 0, xMax: 0 });
+  zoomRef.current = zoom;
+
+  // Mouse-wheel zoom, centered on the cursor — the "normal chart" gesture.
+  // Native non-passive listener so we can preventDefault and stop the page from
+  // scrolling while zooming. Bound once; reads live state via refs. Declared
+  // before any early return to keep hook order stable.
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const onWheel = (ev: WheelEvent) => {
+      ev.preventDefault();
+      const { xMin, xMax } = boundsRef.current;
+      if (!(xMax > xMin)) return;
+      const [curLo, curHi] = zoomRef.current ?? [xMin, xMax];
+      const focusRaw = hoverMsRef.current ?? (curLo + curHi) / 2;
+      const focus = Math.min(Math.max(focusRaw, curLo), curHi);
+      const factor = ev.deltaY < 0 ? 0.8 : 1.25; // up = zoom in, down = zoom out
+      let newLo = focus - (focus - curLo) * factor;
+      let newHi = focus + (curHi - focus) * factor;
+      if (newLo < xMin) newLo = xMin;
+      if (newHi > xMax) newHi = xMax;
+      // Guarantee at least MIN_ZOOM_SPAN, re-centering within bounds if needed.
+      if (newHi - newLo < MIN_ZOOM_SPAN) {
+        if (xMax - xMin <= MIN_ZOOM_SPAN) {
+          newLo = xMin;
+          newHi = xMax;
+        } else {
+          newLo = focus - MIN_ZOOM_SPAN / 2;
+          newHi = focus + MIN_ZOOM_SPAN / 2;
+          if (newLo < xMin) {
+            newLo = xMin;
+            newHi = xMin + MIN_ZOOM_SPAN;
+          }
+          if (newHi > xMax) {
+            newHi = xMax;
+            newLo = xMax - MIN_ZOOM_SPAN;
+          }
+        }
+      }
+      if (newLo <= xMin && newHi >= xMax) setZoom(null);
+      else setZoom([newLo, newHi]);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
 
   if (series.length < 4) {
     return (
@@ -261,14 +312,13 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
 
   // X domain (linear calendar time, ms) — full extent to end of projection.
   const lastIdx = chartData.length - 1;
+  const xMin = chartData[0].t;
   const xMax = chartData[lastIdx].t;
+  boundsRef.current = { xMin, xMax };
 
-  // Active window driven by the Brush slider (an index range into chartData).
-  const startIndex = Math.min(Math.max(brush?.startIndex ?? 0, 0), lastIdx);
-  const endIndex = Math.min(Math.max(brush?.endIndex ?? lastIdx, startIndex), lastIdx);
-  const lo = chartData[startIndex].t;
-  const hi = chartData[endIndex].t;
-  const isZoomed = startIndex > 0 || endIndex < lastIdx;
+  // Active window: full range unless the user has zoomed (scroll wheel or drag).
+  const [lo, hi] = zoom ?? [xMin, xMax];
+  const isZoomed = zoom != null;
 
   // Y domain — auto-fit to the data visible inside the active window, so zooming
   // in on a time period reveals price detail instead of staying global.
@@ -292,6 +342,17 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
     ...p,
     t: p.time * 1000,
   }));
+
+  // Commit a drag selection (if the user dragged a non-trivial range) to zoom.
+  const zoomEnd = () => {
+    if (refLeft != null && refRight != null && refLeft !== refRight) {
+      const a = Math.min(refLeft, refRight);
+      const b = Math.max(refLeft, refRight);
+      if (b - a >= MIN_ZOOM_SPAN) setZoom([a, b]);
+    }
+    setRefLeft(null);
+    setRefRight(null);
+  };
 
   return (
     <div>
@@ -334,11 +395,11 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
           }}
         >
           <span style={{ fontSize: 9, fontFamily: mono, color: "rgba(180,180,200,0.4)" }}>
-            drag the slider below to zoom · hover to read price
+            scroll to zoom · drag to select a range · double-click to reset
           </span>
           {isZoomed && (
             <button
-              onClick={() => setBrush(null)}
+              onClick={() => setZoom(null)}
               style={{
                 fontFamily: mono,
                 fontSize: 9,
@@ -356,18 +417,40 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
         </div>
       </div>
 
+      <div ref={wrapRef} style={{ userSelect: "none", touchAction: "none" }}>
       <ResponsiveContainer width="100%" height={500}>
         <ComposedChart
           data={chartData}
-          margin={{ top: 10, right: 8, bottom: 4, left: 8 }}
+          margin={{ top: 10, right: 8, bottom: 28, left: 8 }}
+          onMouseDown={(e: any) => {
+            const x = Number(e?.activeLabel);
+            if (Number.isFinite(x)) {
+              setRefLeft(x);
+              setRefRight(x);
+            }
+          }}
+          onMouseMove={(e: any) => {
+            const x = Number(e?.activeLabel);
+            if (Number.isFinite(x)) {
+              hoverMsRef.current = x;
+              if (refLeft != null) setRefRight(x);
+            }
+          }}
+          onMouseUp={zoomEnd}
+          onMouseLeave={() => {
+            hoverMsRef.current = null;
+            zoomEnd();
+          }}
+          onDoubleClick={() => setZoom(null)}
         >
-          {/* X-axis: linear calendar time (ms), adaptive ticks. The Brush below
-              controls the visible window, so the axis auto-fits to it. */}
+          {/* X-axis: linear calendar time (ms), adaptive ticks. domain follows the
+              active zoom window (scroll wheel / drag-select drive [lo, hi]). */}
           <XAxis
             dataKey="t"
             type="number"
             scale="linear"
-            domain={["dataMin", "dataMax"]}
+            domain={[lo, hi]}
+            allowDataOverflow
             ticks={xTicks}
             tickFormatter={xFmt}
             tick={{ fontSize: 10, fontFamily: mono, fill: "rgba(180,180,200,0.5)" }}
@@ -468,31 +551,26 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
               />
             ))}
 
+          {/* Drag-to-select zoom region (highlighted while dragging) */}
+          {refLeft != null && refRight != null && refLeft !== refRight && (
+            <ReferenceArea
+              yAxisId="left"
+              x1={refLeft}
+              x2={refRight}
+              fill="rgba(120,160,255,0.14)"
+              stroke="rgba(120,160,255,0.45)"
+              strokeOpacity={0.6}
+            />
+          )}
+
           <Tooltip
             content={<ChartTooltip />}
             cursor={{ stroke: "rgba(220,225,235,0.3)", strokeDasharray: "3 3" }}
             isAnimationActive={false}
           />
-
-          {/* Zoom slider — drag the handles to inspect any time window */}
-          <Brush
-            dataKey="t"
-            height={30}
-            travellerWidth={9}
-            gap={1}
-            startIndex={startIndex}
-            endIndex={endIndex}
-            onChange={(r: any) => {
-              if (r && r.startIndex != null && r.endIndex != null) {
-                setBrush({ startIndex: r.startIndex, endIndex: r.endIndex });
-              }
-            }}
-            stroke="rgba(120,160,255,0.55)"
-            fill="rgba(20,24,36,0.55)"
-            tickFormatter={(ms: number) => String(new Date(ms).getUTCFullYear())}
-          />
         </ComposedChart>
       </ResponsiveContainer>
+      </div>
     </div>
   );
 }

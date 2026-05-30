@@ -35,8 +35,20 @@ Q99≈$197K. Projection runs 2 years past the last data point (price=null on pro
 `[disl4, disl1]`. X-axis is LINEAR calendar time in ms — NOT log-time; the `ln(t)` term
 in the model is what bends the bands into the concave fan when drawn against linear time
 (matches the paper's Figure 1). Price axis is `scale="log"` and lives on the RIGHT only
-(user explicitly rejected a left price axis). Zoom is a native `<Brush>` (the reliable
-choice — the earlier `activeLabel` drag-to-zoom was fragile/non-working); the brushed
-index window drives the visible range, the y-domain auto-fit, and the adaptive x-ticks
-(years→quarters→months as you zoom in). **Why:** keep these UX decisions consistent if
-the chart is revisited — right-side price + Brush were specific user requests.
+(user explicitly rejected a left price axis).
+
+**Zoom interaction (user rejected both a Brush slider AND sliders generally — "they
+don't drag"):** "normal chart" zoom = scroll-wheel (centered on cursor) + drag-to-select
+a range + double-click to reset. Implemented with `zoom: [lo,hi]|null` state driving
+`XAxis domain={[lo,hi]} allowDataOverflow`; the active window also drives the y-domain
+auto-fit and adaptive x-ticks (years→quarters→months). Gotchas that bit us:
+- Wheel must be a NATIVE non-passive listener (`addEventListener('wheel', fn, {passive:false})`
+  on a wrapper div ref) so `preventDefault()` can stop page scroll — React's onWheel is passive.
+- The wheel handler reads live state via refs (`zoomRef`, `hoverMsRef` from `activeLabel`,
+  `boundsRef` for xMin/xMax) and binds ONCE (`useEffect` deps `[]`) — avoids stale closures.
+- That `useEffect` MUST sit ABOVE the `if (series.length < 4) return` early-return or hook
+  order breaks. Keep all hooks before any conditional return.
+- Enforce `MIN_ZOOM_SPAN` (21d) by re-centering within bounds, not a naive
+  `min(xMax, lo+MIN)` — the naive form yields sub-min spans near the right edge.
+**Why:** these are specific, repeated user UX requests (right-side price + wheel/drag zoom,
+no sliders); keep them if the chart is revisited.
