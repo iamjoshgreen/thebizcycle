@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   useGetBtcQuantile,
   useRefreshBtcQuantile,
@@ -100,6 +101,102 @@ function fmtYTick(v: number): string {
   return `$${v}`;
 }
 
+const MON = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+const DAY_MS = 86_400_000;
+
+// Adaptive x-axis ticks: the deeper the zoom, the finer the time markers
+// (years → half-years → quarters → months). Returns ticks (ms) + a label fmt.
+function computeXTicks(lo: number, hi: number): {
+  ticks: number[];
+  fmt: (ms: number) => string;
+} {
+  const spanDays = (hi - lo) / DAY_MS;
+  const startY = new Date(lo).getUTCFullYear();
+  const endY = new Date(hi).getUTCFullYear();
+  const ticks: number[] = [];
+  const push = (ms: number) => {
+    if (ms >= lo && ms <= hi) ticks.push(ms);
+  };
+  const yearLabel = (ms: number) => String(new Date(ms).getUTCFullYear());
+  const monthLabel = (ms: number) => {
+    const d = new Date(ms);
+    return d.getUTCMonth() === 0
+      ? String(d.getUTCFullYear())
+      : `${MON[d.getUTCMonth()]} '${String(d.getUTCFullYear()).slice(2)}`;
+  };
+
+  if (spanDays > 365 * 24) {
+    for (let y = startY; y <= endY + 1; y += 2) push(Date.UTC(y, 0, 1));
+    return { ticks, fmt: yearLabel };
+  }
+  if (spanDays > 365 * 2.5) {
+    for (let y = startY; y <= endY + 1; y++) push(Date.UTC(y, 0, 1));
+    return { ticks, fmt: yearLabel };
+  }
+  if (spanDays > 270) {
+    for (let y = startY; y <= endY + 1; y++)
+      for (const m of [0, 3, 6, 9]) push(Date.UTC(y, m, 1));
+    return { ticks, fmt: monthLabel };
+  }
+  // ≤ ~9 months: monthly ticks
+  for (let y = startY; y <= endY + 1; y++)
+    for (let m = 0; m < 12; m++) push(Date.UTC(y, m, 1));
+  return { ticks, fmt: monthLabel };
+}
+
+// Hover tooltip — reads the date + price + key quantiles at the cursor.
+function ChartTooltip({ active, payload, label }: any) {
+  if (!active || !payload || !payload.length || label == null) return null;
+  const mono = "'JetBrains Mono', monospace";
+  const get = (k: string) => payload.find((p: any) => p.dataKey === k)?.value;
+  const price = get("price");
+  const d = new Date(label);
+  const dateStr = `${MON[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+  const rows: Array<{ k: string; label: string; color: string }> = [
+    { k: "q99", label: "Q99", color: "#a52828" },
+    { k: "q95", label: "Q95", color: "#d35f3a" },
+    { k: "q50", label: "Q50", color: "#c8b94a" },
+    { k: "q10", label: "Q10", color: "#4a9d4f" },
+    { k: "q01", label: "Q1", color: "#1a6b2f" },
+  ];
+  return (
+    <div
+      style={{
+        background: "rgba(18,20,28,0.96)",
+        border: "1px solid rgba(120,130,160,0.3)",
+        borderRadius: 6,
+        padding: "8px 10px",
+        fontFamily: mono,
+        fontSize: 10,
+        lineHeight: 1.6,
+        color: "rgba(220,225,235,0.85)",
+        boxShadow: "0 4px 18px rgba(0,0,0,0.45)",
+      }}
+    >
+      <div style={{ color: "rgba(180,180,200,0.7)", marginBottom: 4 }}>{dateStr}</div>
+      {price != null && (
+        <div style={{ color: "rgba(247,147,26,0.95)", fontWeight: 600, marginBottom: 4 }}>
+          BTC&nbsp;&nbsp;{fmtPrice(price)}
+        </div>
+      )}
+      {rows.map((r) => {
+        const v = get(r.k);
+        if (v == null) return null;
+        return (
+          <div key={r.k} style={{ display: "flex", justifyContent: "space-between", gap: 14 }}>
+            <span style={{ color: r.color }}>{r.label}</span>
+            <span>{fmtPrice(v)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 type ChartDatum = {
   t: number; // milliseconds since epoch — linear calendar-time X coordinate
   price?: number;
@@ -120,6 +217,9 @@ type ChartDatum = {
 function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
   const mono = "'JetBrains Mono', monospace";
   const nowSec = Math.floor(Date.now() / 1000);
+  const [zoom, setZoom] = useState<[number, number] | null>(null);
+  const [refLeft, setRefLeft] = useState<number | null>(null);
+  const [refRight, setRefRight] = useState<number | null>(null);
 
   if (series.length < 4) {
     return (
@@ -160,34 +260,44 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
   const lastHistMs = (histSeries[histSeries.length - 1]?.time ?? nowSec) * 1000;
   const nowMs = nowSec * 1000;
 
-  // Y domain — include dislocation floor (disl4) up to the top quantile (q99).
-  const allVals = series.flatMap((p) => [
+  // X domain (linear calendar time, ms) — first series point to end of projection.
+  const xMin = chartData[0].t;
+  const xMax = chartData[chartData.length - 1].t;
+
+  // Active window: full range unless the user has dragged a zoom selection.
+  const [lo, hi] = zoom ?? [xMin, xMax];
+  const isZoomed = zoom != null;
+
+  // Y domain — auto-fit to the data visible inside the active window, so zooming
+  // in on a time period reveals price detail instead of staying global.
+  const visible = series.filter((p) => p.time * 1000 >= lo && p.time * 1000 <= hi);
+  const yVals = (visible.length ? visible : series).flatMap((p) => [
     p.disl4,
     p.q99,
     ...(p.price != null ? [p.price] : []),
   ]);
-  const yMin = Math.min(...allVals) * 0.7;
-  const yMax = Math.max(...allVals) * 1.4;
+  const yMin = Math.min(...yVals) * 0.7;
+  const yMax = Math.max(...yVals) * 1.4;
   const yTicks = Y_TICKS.filter((t) => t >= yMin * 0.9 && t <= yMax * 1.1);
 
-  // X domain (linear calendar time, ms) — first series point to end of projection
-  const xMin = chartData[0].t;
-  const xMax = chartData[chartData.length - 1].t;
-
-  // Year-boundary ticks: Jan 1 (UTC ms) of each year in range
-  const startYear = new Date(xMin).getUTCFullYear();
-  const endYear = new Date(xMax).getUTCFullYear();
-  const yearStep = endYear - startYear > 14 ? 2 : 1;
-  const yearTicks: number[] = [];
-  for (let y = Math.ceil(startYear / yearStep) * yearStep; y <= endYear; y += yearStep) {
-    const ms = Date.UTC(y, 0, 1);
-    if (ms >= xMin && ms <= xMax) yearTicks.push(ms);
-  }
+  // X ticks — adaptive granularity (years → quarters → months) as you zoom in.
+  const computed = computeXTicks(lo, hi);
+  // Guard ultra-tight windows that produce no boundary ticks: fall back to ends.
+  const xTicks = computed.ticks.length > 0 ? computed.ticks : [lo, hi];
+  const xFmt = computed.fmt;
 
   const peakAnnotations = cyclePeaks.map((p) => ({
     ...p,
     t: p.time * 1000,
   }));
+
+  const zoomEnd = () => {
+    if (refLeft != null && refRight != null && refLeft !== refRight) {
+      setZoom([Math.min(refLeft, refRight), Math.max(refLeft, refRight)]);
+    }
+    setRefLeft(null);
+    setRefRight(null);
+  };
 
   return (
     <div>
@@ -219,18 +329,67 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
             BTC price
           </span>
         </div>
+
+        <div
+          style={{
+            marginLeft: "auto",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            paddingRight: 8,
+          }}
+        >
+          <span style={{ fontSize: 9, fontFamily: mono, color: "rgba(180,180,200,0.4)" }}>
+            drag across the chart to zoom · hover to read price
+          </span>
+          {isZoomed && (
+            <button
+              onClick={() => setZoom(null)}
+              style={{
+                fontFamily: mono,
+                fontSize: 9,
+                color: "rgba(220,225,235,0.85)",
+                background: "rgba(120,160,255,0.12)",
+                border: "1px solid rgba(120,160,255,0.35)",
+                borderRadius: 4,
+                padding: "3px 8px",
+                cursor: "pointer",
+              }}
+            >
+              Reset zoom
+            </button>
+          )}
+        </div>
       </div>
 
       <ResponsiveContainer width="100%" height={500}>
-        <ComposedChart data={chartData} margin={{ top: 10, right: 20, bottom: 28, left: 8 }}>
-          {/* X-axis: log(days since genesis) — linear over pre-transformed values = log scale */}
+        <ComposedChart
+          data={chartData}
+          margin={{ top: 10, right: 20, bottom: 28, left: 8 }}
+          onMouseDown={(e: any) => {
+            const x = Number(e?.activeLabel);
+            if (Number.isFinite(x)) {
+              setRefLeft(x);
+              setRefRight(x);
+            }
+          }}
+          onMouseMove={(e: any) => {
+            if (refLeft == null) return;
+            const x = Number(e?.activeLabel);
+            if (Number.isFinite(x)) setRefRight(x);
+          }}
+          onMouseUp={zoomEnd}
+          onMouseLeave={zoomEnd}
+        >
+          {/* X-axis: linear calendar time (ms), adaptive ticks, zoomable domain */}
           <XAxis
             dataKey="t"
             type="number"
             scale="linear"
-            domain={[xMin, xMax]}
-            ticks={yearTicks}
-            tickFormatter={(ms: number) => String(new Date(ms).getUTCFullYear())}
+            domain={[lo, hi]}
+            allowDataOverflow
+            ticks={xTicks}
+            tickFormatter={xFmt}
             tick={{ fontSize: 10, fontFamily: mono, fill: "rgba(180,180,200,0.5)" }}
             axisLine={false}
             tickLine={false}
@@ -327,21 +486,39 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
           />
 
           {/* Today marker */}
-          {nowMs >= xMin && nowMs <= xMax && (
+          {nowMs >= lo && nowMs <= hi && (
             <ReferenceLine yAxisId="left" x={nowMs} stroke="rgba(220,225,235,0.25)" strokeDasharray="3 3"
               label={{ value: "today", position: "insideTopRight", fontSize: 9, fontFamily: mono, fill: "rgba(220,225,235,0.4)" }}
             />
           )}
 
           {/* Cycle peak markers */}
-          {peakAnnotations.map((peak) => (
-            <ReferenceLine yAxisId="left" key={peak.label} x={peak.t}
-              stroke="rgba(220,225,235,0.18)" strokeDasharray="2 3"
-              label={{ value: `${peak.label}  ${fmtPrice(peak.price)}`, position: "insideTopLeft", fontSize: 8, fontFamily: mono, fill: "rgba(247,147,26,0.65)" }}
-            />
-          ))}
+          {peakAnnotations
+            .filter((peak) => peak.t >= lo && peak.t <= hi)
+            .map((peak) => (
+              <ReferenceLine yAxisId="left" key={peak.label} x={peak.t}
+                stroke="rgba(220,225,235,0.18)" strokeDasharray="2 3"
+                label={{ value: `${peak.label}  ${fmtPrice(peak.price)}`, position: "insideTopLeft", fontSize: 8, fontFamily: mono, fill: "rgba(247,147,26,0.65)" }}
+              />
+            ))}
 
-          <Tooltip content={() => null} />
+          {/* Drag-to-zoom selection rectangle */}
+          {refLeft != null && refRight != null && refLeft !== refRight && (
+            <ReferenceArea
+              yAxisId="left"
+              x1={refLeft}
+              x2={refRight}
+              fill="rgba(120,160,255,0.14)"
+              stroke="rgba(120,160,255,0.45)"
+              strokeOpacity={0.6}
+            />
+          )}
+
+          <Tooltip
+            content={<ChartTooltip />}
+            cursor={{ stroke: "rgba(220,225,235,0.3)", strokeDasharray: "3 3" }}
+            isAnimationActive={false}
+          />
         </ComposedChart>
       </ResponsiveContainer>
     </div>
