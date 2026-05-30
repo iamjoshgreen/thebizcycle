@@ -348,12 +348,16 @@ export async function fetchBtcQuantilePayload(): Promise<BtcQuantilePayload> {
   }
 
   // ─── Current position ─────────────────────────────────────────────────────
+  // series = [...preData, ...historical, ...projection]; use the last entry
+  // that has a real price (i.e. the last historical weekly close).
 
-  const lastPt = series[times.length - 1];
-  const currentPrice = lastPt.price;
-  const currentLower = lastPt.lower;
-  const currentMedian = lastPt.median;
-  const currentUpper = lastPt.upper;
+  const lastHistPt = series.filter((p) => p.price != null).at(-1);
+  if (!lastHistPt) throw new Error("No historical price data found in series");
+
+  const currentPrice = lastHistPt.price;
+  const currentLower = lastHistPt.lower;
+  const currentMedian = lastHistPt.median;
+  const currentUpper = lastHistPt.upper;
 
   let currentPercentile: number | null = null;
   if (currentPrice != null && currentLower > 0 && currentUpper > currentLower) {
