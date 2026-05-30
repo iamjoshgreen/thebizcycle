@@ -57,17 +57,6 @@ function ordinal(n: number): string {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 //
-// Display x-axis transform. This is the GENESIS used only for the log-time axis —
-// it is intentionally separate from the model's anchor (the model uses its own
-// fixed constants inside the backend). Jan 1, 2009 matches the model anchor.
-
-const GENESIS_S = Math.floor(Date.UTC(2009, 0, 1) / 1000);
-const DAY_S = 86400;
-
-function toLogDays(unixSec: number): number {
-  return Math.log(Math.max(1, (unixSec - GENESIS_S) / DAY_S));
-}
-
 // Seven-quantile fan, colored dark green → dark red to match the paper's Figure 1.
 const QLINES: Array<{ key: keyof BtcQuantilePoint; color: string; label: string }> = [
   { key: "q01", color: "#1a6b2f", label: "1%" },
@@ -83,9 +72,11 @@ const GOLD = "#d4af37";
 
 // ─── Chart ────────────────────────────────────────────────────────────────────
 //
-// Recharts ComposedChart in true log-log space:
-//   X-axis = log(days since genesis)  →  XAxis type="number" (linear over pre-transformed values)
-//   Y-axis = log(price)               →  YAxis scale="log" (Recharts handles the log transform)
+// Recharts ComposedChart: linear calendar-time X, log-price Y.
+//   X-axis = real time (ms)  →  XAxis type="number" scale="linear" (paper's Figure 1)
+//   Y-axis = log(price)       →  YAxis scale="log" (Recharts handles the log transform)
+// Plotting the ln(t)-driven bands against linear time produces the concave fan: the
+// upper quantiles bend inward over time while the lower quantiles stay near-straight.
 //
 // Layers (back → front):
 //   1. golden dislocation zone (Area between disl1 top and disl4 bottom)
@@ -110,7 +101,7 @@ function fmtYTick(v: number): string {
 }
 
 type ChartDatum = {
-  ld: number; // log(days since genesis) — the X coordinate
+  t: number; // milliseconds since epoch — linear calendar-time X coordinate
   price?: number;
   q01: number;
   q10: number;
@@ -149,7 +140,7 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
   }
 
   const chartData: ChartDatum[] = series.map((p) => ({
-    ld: toLogDays(p.time),
+    t: p.time * 1000,
     price: p.price ?? undefined,
     q01: p.q01,
     q10: p.q10,
@@ -166,8 +157,8 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
   }));
 
   const histSeries = series.filter((p) => p.price != null);
-  const lastHistLd = toLogDays(histSeries[histSeries.length - 1]?.time ?? nowSec);
-  const nowLd = toLogDays(nowSec);
+  const lastHistMs = (histSeries[histSeries.length - 1]?.time ?? nowSec) * 1000;
+  const nowMs = nowSec * 1000;
 
   // Y domain — include dislocation floor (disl4) up to the top quantile (q99).
   const allVals = series.flatMap((p) => [
@@ -179,24 +170,23 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
   const yMax = Math.max(...allVals) * 1.4;
   const yTicks = Y_TICKS.filter((t) => t >= yMin * 0.9 && t <= yMax * 1.1);
 
-  // X domain (logDays) — spans from first series point to end of projection
-  const xMin = chartData[0].ld;
-  const xMax = chartData[chartData.length - 1].ld;
+  // X domain (linear calendar time, ms) — first series point to end of projection
+  const xMin = chartData[0].t;
+  const xMax = chartData[chartData.length - 1].t;
 
-  // Year-boundary ticks: compute logDays for Jan 1 of each year
-  const startYear = new Date(series[0].time * 1000).getUTCFullYear();
-  const endYear = new Date(series[series.length - 1].time * 1000).getUTCFullYear();
+  // Year-boundary ticks: Jan 1 (UTC ms) of each year in range
+  const startYear = new Date(xMin).getUTCFullYear();
+  const endYear = new Date(xMax).getUTCFullYear();
   const yearStep = endYear - startYear > 14 ? 2 : 1;
   const yearTicks: number[] = [];
   for (let y = Math.ceil(startYear / yearStep) * yearStep; y <= endYear; y += yearStep) {
-    const t = Math.floor(new Date(`${y}-01-01T00:00:00Z`).getTime() / 1000);
-    const ld = toLogDays(t);
-    if (ld >= xMin && ld <= xMax) yearTicks.push(ld);
+    const ms = Date.UTC(y, 0, 1);
+    if (ms >= xMin && ms <= xMax) yearTicks.push(ms);
   }
 
   const peakAnnotations = cyclePeaks.map((p) => ({
     ...p,
-    ld: toLogDays(p.time),
+    t: p.time * 1000,
   }));
 
   return (
@@ -235,22 +225,35 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
         <ComposedChart data={chartData} margin={{ top: 10, right: 20, bottom: 28, left: 8 }}>
           {/* X-axis: log(days since genesis) — linear over pre-transformed values = log scale */}
           <XAxis
-            dataKey="ld"
+            dataKey="t"
             type="number"
+            scale="linear"
             domain={[xMin, xMax]}
             ticks={yearTicks}
-            tickFormatter={(ld: number) => {
-              const days = Math.exp(ld);
-              const t = GENESIS_S + days * DAY_S;
-              return String(new Date(t * 1000).getUTCFullYear());
-            }}
+            tickFormatter={(ms: number) => String(new Date(ms).getUTCFullYear())}
             tick={{ fontSize: 10, fontFamily: mono, fill: "rgba(180,180,200,0.5)" }}
             axisLine={false}
             tickLine={false}
           />
 
-          {/* Y-axis: log scale price */}
+          {/* Y-axis: log scale price — left */}
           <YAxis
+            yAxisId="left"
+            scale="log"
+            domain={[yMin, yMax]}
+            ticks={yTicks}
+            tickFormatter={fmtYTick}
+            tick={{ fontSize: 10, fontFamily: mono, fill: "rgba(247,147,26,0.6)" }}
+            axisLine={false}
+            tickLine={false}
+            width={68}
+            allowDataOverflow
+          />
+
+          {/* Y-axis: log scale price — right (mirror, for reading current price) */}
+          <YAxis
+            yAxisId="right"
+            orientation="right"
             scale="log"
             domain={[yMin, yMax]}
             ticks={yTicks}
@@ -263,10 +266,11 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
           />
 
           {/* Projection zone shading */}
-          <ReferenceArea x1={lastHistLd} x2={xMax} fill="rgba(180,180,200,0.025)" stroke="none" />
+          <ReferenceArea yAxisId="left" x1={lastHistMs} x2={xMax} fill="rgba(180,180,200,0.025)" stroke="none" />
 
           {/* Golden dislocation zone: Area between disl4 (bottom) and disl1 (top) */}
           <Area
+            yAxisId="left"
             type="monotone"
             dataKey="gold"
             fill={GOLD}
@@ -281,6 +285,7 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
           {(["disl1", "disl2", "disl3", "disl4"] as const).map((k) => (
             <Line
               key={k}
+              yAxisId="left"
               type="monotone"
               dataKey={k}
               stroke={GOLD}
@@ -297,6 +302,7 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
           {QLINES.map((q) => (
             <Line
               key={q.key}
+              yAxisId="left"
               type="monotone"
               dataKey={q.key}
               stroke={q.color}
@@ -309,6 +315,7 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
 
           {/* BTC price (null values leave a natural gap in the projection zone) */}
           <Line
+            yAxisId="left"
             type="monotone"
             dataKey="price"
             stroke="rgba(247,147,26,0.95)"
@@ -320,15 +327,15 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
           />
 
           {/* Today marker */}
-          {nowLd >= xMin && nowLd <= xMax && (
-            <ReferenceLine x={nowLd} stroke="rgba(220,225,235,0.25)" strokeDasharray="3 3"
+          {nowMs >= xMin && nowMs <= xMax && (
+            <ReferenceLine yAxisId="left" x={nowMs} stroke="rgba(220,225,235,0.25)" strokeDasharray="3 3"
               label={{ value: "today", position: "insideTopRight", fontSize: 9, fontFamily: mono, fill: "rgba(220,225,235,0.4)" }}
             />
           )}
 
           {/* Cycle peak markers */}
           {peakAnnotations.map((peak) => (
-            <ReferenceLine key={peak.label} x={peak.ld}
+            <ReferenceLine yAxisId="left" key={peak.label} x={peak.t}
               stroke="rgba(220,225,235,0.18)" strokeDasharray="2 3"
               label={{ value: `${peak.label}  ${fmtPrice(peak.price)}`, position: "insideTopLeft", fontSize: 8, fontFamily: mono, fill: "rgba(247,147,26,0.65)" }}
             />
@@ -666,9 +673,10 @@ export default function BtcQuantilePage() {
               maxWidth: 640,
             }}
           >
-            Seven fixed-coefficient quantiles (Table 3) of Bitcoin's price in log-log space.
-            The upper quantiles curve inward across cycles — the asymmetric tail curvature —
-            while the lower quantiles hold a near-straight power law. Deterministic, not fitted.
+            Seven fixed-coefficient quantiles (Table 3) of Bitcoin's price, plotted on a
+            log-price / calendar-time chart. The upper quantiles curve inward across cycles —
+            the asymmetric tail curvature — while the lower quantiles hold a near-straight
+            power law. Deterministic, not fitted.
           </p>
         </div>
 
@@ -875,7 +883,7 @@ export default function BtcQuantilePage() {
                 {
                   title: "What the fan shows",
                   text:
-                    "Seven quantiles (1, 10, 25, 50, 75, 95, 99%) of Bitcoin's price as fixed-coefficient curves in log-log space: log₁₀(price) = c + a·x + b·x², where x = ln(days since Jan 1 2009) − 7.9914. The coefficients come from Table 3 of the paper and are not re-estimated — the same curves render every time. Per date, the seven values are sorted ascending (rearrangement) to guarantee they never cross.",
+                    "Seven quantiles (1, 10, 25, 50, 75, 95, 99%) of Bitcoin's price as fixed-coefficient curves: log₁₀(price) = c + a·x + b·x², where x = ln(days since Jan 1 2009) − 7.9914. Drawn on a log-price y-axis against linear calendar time, the ln(t) term bends the curves into the concave fan. The coefficients come from Table 3 of the paper and are not re-estimated — the same curves render every time. Per date, the seven values are sorted ascending (rearrangement) to guarantee they never cross.",
                 },
                 {
                   title: "The asymmetry",
