@@ -260,11 +260,11 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
             />
           )}
 
-          {/* Cycle peak markers (all 4 now on-chart since series extends to genesis) */}
+          {/* Cycle peak markers */}
           {peakAnnotations.map((peak) => (
             <ReferenceLine key={peak.label} x={peak.ld}
-              stroke="rgba(220,225,235,0.15)" strokeDasharray="2 3"
-              label={{ value: `${peak.label} ${Math.round(peak.pctOfUpper * 100)}%↑`, position: "insideTopLeft", fontSize: 8, fontFamily: mono, fill: "rgba(247,147,26,0.7)" }}
+              stroke="rgba(220,225,235,0.18)" strokeDasharray="2 3"
+              label={{ value: `${peak.label}  ${fmtPrice(peak.price)}`, position: "insideTopLeft", fontSize: 8, fontFamily: mono, fill: "rgba(247,147,26,0.65)" }}
             />
           ))}
 

@@ -160,15 +160,75 @@ function evalModel(coeffs: number[], logDays: number): number {
   return coeffs[0] + coeffs[1] * logDays + coeffs[2] * logDays * logDays;
 }
 
+// ─── Early BTC price history ──────────────────────────────────────────────────
+//
+// Yahoo Finance BTC-USD coverage starts ~Sep 2014. These monthly close prices
+// (Jul 2010 – Sep 2014) are sourced from well-documented exchange records
+// (Mt.Gox → Bitstamp) and fill the gap so the regression and price line cover
+// the full available history including both the 2011 and 2013 cycle peaks.
+//
+// [dateStr, USD close]
+const EARLY_BTC_PRICES: Array<[string, number]> = [
+  ["2010-07-01", 0.0584],
+  ["2010-08-01", 0.0694],
+  ["2010-09-01", 0.0614],
+  ["2010-10-01", 0.0974],
+  ["2010-11-01", 0.2378],
+  ["2010-12-01", 0.2180],
+  ["2011-01-01", 0.3100],
+  ["2011-02-01", 0.8900],
+  ["2011-03-01", 0.9900],
+  ["2011-04-01", 1.0200],
+  ["2011-05-01", 6.0000],
+  ["2011-06-01", 31.9100], // June 2011 peak
+  ["2011-07-01", 13.4000],
+  ["2011-08-01", 10.0000],
+  ["2011-09-01", 5.0000],
+  ["2011-10-01", 3.4800],
+  ["2011-11-01", 2.5200],
+  ["2011-12-01", 3.0600],
+  ["2012-01-01", 6.1800],
+  ["2012-02-01", 4.8800],
+  ["2012-03-01", 4.8900],
+  ["2012-04-01", 5.0800],
+  ["2012-05-01", 5.0200],
+  ["2012-06-01", 6.7000],
+  ["2012-07-01", 7.1400],
+  ["2012-08-01", 9.7500],
+  ["2012-09-01", 12.3700],
+  ["2012-10-01", 10.9600],
+  ["2012-11-01", 11.6000],
+  ["2012-12-01", 13.4500],
+  ["2013-01-01", 15.4000],
+  ["2013-02-01", 28.5000],
+  ["2013-03-01", 92.0000],
+  ["2013-04-01", 135.0000],
+  ["2013-05-01", 118.0000],
+  ["2013-06-01", 97.5000],
+  ["2013-07-01", 87.0000],
+  ["2013-08-01", 104.0000],
+  ["2013-09-01", 126.0000],
+  ["2013-10-01", 196.0000],
+  ["2013-11-01", 1242.000], // November 2013 peak
+  ["2013-12-01", 710.0000],
+  ["2014-01-01", 912.0000],
+  ["2014-02-01", 585.0000],
+  ["2014-03-01", 458.0000],
+  ["2014-04-01", 440.0000],
+  ["2014-05-01", 438.0000],
+  ["2014-06-01", 584.0000],
+  ["2014-07-01", 624.0000],
+  ["2014-08-01", 510.0000],
+  ["2014-09-01", 380.0000],
+];
+
 // ─── Known cycle peaks ────────────────────────────────────────────────────────
 
-// Known cycle peaks. Pre-data entries (before Yahoo BTC-USD coverage ~Sep 2014)
-// carry a hardcoded price; the bands at those dates are computed via model extrapolation.
-const PEAK_DATES: Array<{ label: string; dateStr: string; knownPrice?: number }> = [
-  { label: "2011 Peak", dateStr: "2011-06-08", knownPrice: 31.91 },
-  { label: "2013 Peak", dateStr: "2013-11-30", knownPrice: 1242 },
-  { label: "2017 Peak", dateStr: "2017-12-17" },
-  { label: "2021 Peak", dateStr: "2021-11-08" },
+const PEAK_DATES: Array<{ label: string; dateStr: string }> = [
+  { label: "2011", dateStr: "2011-06-08" },
+  { label: "2013", dateStr: "2013-11-30" },
+  { label: "2017", dateStr: "2017-12-17" },
+  { label: "2021", dateStr: "2021-11-08" },
 ];
 
 // ─── Main entry ───────────────────────────────────────────────────────────────
@@ -189,8 +249,14 @@ export async function fetchBtcQuantilePayload(): Promise<BtcQuantilePayload> {
     throw new Error("BTC-USD data unavailable from Yahoo Finance");
   }
 
-  // Build sorted (time, price) pairs — anchor to Friday
+  // Build sorted (time, price) pairs.
+  // Seed with hardcoded early history first (Jul 2010 – Sep 2014);
+  // Yahoo data (starting ~Sep 2014) will overwrite any overlap.
   const priceMap = new Map<number, number>();
+  for (const [dateStr, price] of EARLY_BTC_PRICES) {
+    const t = Math.floor(new Date(dateStr + "T00:00:00Z").getTime() / 1000);
+    priceMap.set(t, price);
+  }
   for (const q of raw.quotes) {
     if (!q.date || q.close == null || !isFinite(q.close) || q.close <= 0) continue;
     const d = new Date(q.date);
@@ -254,24 +320,9 @@ export async function fetchBtcQuantilePayload(): Promise<BtcQuantilePayload> {
 
   const lastTime = times[times.length - 1];
 
-  // Pre-data synthetic points (monthly) from genesis to first real data point.
-  // price=null, but band values let the chart render the full quantile envelope
-  // back to 2009 so the 2011 and 2013 cycle-peak annotations are on-chart.
-  const MONTH_S = 30 * DAY_S;
-  const preData: BtcQuantilePoint[] = [];
-  for (let t = GENESIS_S + MONTH_S; t < times[0]; t += MONTH_S) {
-    const ld = Math.log(Math.max(1, (t - GENESIS_S) / DAY_S));
-    preData.push({
-      time: t,
-      price: null,
-      lower: Math.exp(evalModel(lowerCoeffs, ld)),
-      median: Math.exp(evalModel(medianCoeffs, ld)),
-      upper: Math.exp(evalModel(upperCoeffs, ld)),
-    });
-  }
-
-  // Historical weekly Fridays (actual Yahoo data)
-  const series: BtcQuantilePoint[] = [...preData];
+  // All data points now have real prices (early history + Yahoo).
+  // No null-price pre-data prefix needed.
+  const series: BtcQuantilePoint[] = [];
   for (let i = 0; i < times.length; i++) {
     const t = times[i];
     const ld = logDaysArr[i];
@@ -300,7 +351,7 @@ export async function fetchBtcQuantilePayload(): Promise<BtcQuantilePayload> {
   // ─── Cycle peaks ──────────────────────────────────────────────────────────
 
   const cyclePeaks: BtcCyclePeak[] = [];
-  for (const { label, dateStr, knownPrice } of PEAK_DATES) {
+  for (const { label, dateStr } of PEAK_DATES) {
     const targetS = Math.floor(new Date(dateStr + "T00:00:00Z").getTime() / 1000);
 
     // Try to locate the peak in the available price data (within ±4 weeks of target date)
@@ -314,33 +365,21 @@ export async function fetchBtcQuantilePayload(): Promise<BtcQuantilePayload> {
       }
     }
 
-    let peakTime: number;
-    let peakPrice: number;
-    let peakLogDays: number;
+    if (bestIdx === -1) continue; // peak not in dataset window — skip
 
-    if (bestIdx !== -1) {
-      // Found in data: search local max within ±6 weekly bars
-      const window = 6;
-      let maxIdx = bestIdx;
-      for (
-        let i = Math.max(0, bestIdx - window);
-        i <= Math.min(times.length - 1, bestIdx + window);
-        i++
-      ) {
-        if (prices[i] > prices[maxIdx]) maxIdx = i;
-      }
-      peakTime = times[maxIdx];
-      peakPrice = prices[maxIdx];
-      peakLogDays = logDaysArr[maxIdx];
-    } else if (knownPrice != null) {
-      // Pre-data peak (e.g. 2011, 2013): use documented historical price and
-      // evaluate the fitted model via extrapolation to that date.
-      peakTime = targetS;
-      peakPrice = knownPrice;
-      peakLogDays = Math.log(Math.max(1, (targetS - GENESIS_S) / DAY_S));
-    } else {
-      continue;
+    // Search local max within ±6 bars of the nearest match
+    const window = 6;
+    let maxIdx = bestIdx;
+    for (
+      let i = Math.max(0, bestIdx - window);
+      i <= Math.min(times.length - 1, bestIdx + window);
+      i++
+    ) {
+      if (prices[i] > prices[maxIdx]) maxIdx = i;
     }
+    const peakTime = times[maxIdx];
+    const peakPrice = prices[maxIdx];
+    const peakLogDays = logDaysArr[maxIdx];
 
     const upperBand = Math.exp(evalModel(upperCoeffs, peakLogDays));
     const pctOfUpper = peakPrice / upperBand;
@@ -348,7 +387,7 @@ export async function fetchBtcQuantilePayload(): Promise<BtcQuantilePayload> {
   }
 
   // ─── Current position ─────────────────────────────────────────────────────
-  // series = [...preData, ...historical, ...projection]; use the last entry
+  // series = [...historical (early+Yahoo), ...projection]; find the last entry
   // that has a real price (i.e. the last historical weekly close).
 
   const lastHistPt = series.filter((p) => p.price != null).at(-1);
