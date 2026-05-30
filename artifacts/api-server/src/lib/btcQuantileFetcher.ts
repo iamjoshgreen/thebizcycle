@@ -3,44 +3,214 @@ import { logger } from "./logger.js";
 
 const yahooFinance = new YahooFinanceClass();
 
-// BTC genesis block: January 3, 2009
-const GENESIS_DATE = "2009-01-03";
-const GENESIS_S = Math.floor(new Date(GENESIS_DATE + "T00:00:00Z").getTime() / 1000);
+// ─── Fixed model constants (Table 3 + Section 4.2) ─────────────────────────────
+//
+// This is a DETERMINISTIC fixed-coefficient model — nothing is fit at runtime.
+// Source: "Asymmetric Tail Curvature in Bitcoin Price Quantiles".
+//
+//   t = days since Jan 1, 2009 (the Table 3 anchor)
+//   x = ln(t) − MU          (natural log of time, centered at the fixed MU)
+//   log10(price) = c + a·x + b·x²
+//   price = 10^(c + a·x + b·x²)
+//   then rearrange (ascending sort) the 7 quantile prices per date.
+//
+// Time is natural-log; price is base-10. The two bases are intentional.
+
+const GENESIS_S = Math.floor(Date.UTC(2009, 0, 1) / 1000); // Jan 1, 2009
+const MU = 7.9914; // fixed centering constant (NOT the data mean)
 const DAY_S = 86400;
 const WEEK_S = 7 * DAY_S;
+
+// Table 3, ordered low → high quantile.
+const QUANTILES: Array<{ tau: number; c: number; a: number; b: number }> = [
+  { tau: 0.01, c: 2.837, a: 2.578, b: -0.0241 },
+  { tau: 0.1, c: 2.933, a: 2.552, b: -0.0241 },
+  { tau: 0.25, c: 3.004, a: 2.554, b: -0.0241 },
+  { tau: 0.5, c: 3.214, a: 2.482, b: -0.1126 },
+  { tau: 0.75, c: 3.562, a: 2.283, b: -0.3259 },
+  { tau: 0.95, c: 3.897, a: 1.964, b: -0.3259 },
+  { tau: 0.99, c: 4.028, a: 1.904, b: -0.3259 },
+];
+
+// Dislocation offsets below Q1% (Figure 1). Golden zone spans disl1 (top) → disl4 (bottom).
+const DISLOCATIONS = [-0.0735, -0.174, -0.226, -0.346];
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface BtcQuantilePoint {
   time: number;
   price: number | null; // null for projection points
-  lower: number;
-  median: number;
-  upper: number;
+  q01: number;
+  q10: number;
+  q25: number;
+  q50: number;
+  q75: number;
+  q95: number;
+  q99: number;
+  disl1: number;
+  disl2: number;
+  disl3: number;
+  disl4: number;
 }
 
 export interface BtcCyclePeak {
   time: number;
   price: number;
   label: string;
-  upperBand: number;
-  pctOfUpper: number;
+  q99: number; // Q99% band value at the time of the peak
+  pctOfQ99: number; // price / q99 — fraction of the top quantile the peak reached
 }
 
 export interface BtcQuantilePayload {
   series: BtcQuantilePoint[];
   cyclePeaks: BtcCyclePeak[];
   currentPrice: number | null;
-  currentLower: number | null;
-  currentMedian: number | null;
-  currentUpper: number | null;
-  currentPercentile: number | null;
-  lowerCoeffs: number[];
-  medianCoeffs: number[];
-  upperCoeffs: number[];
+  currentQ01: number | null;
+  currentQ10: number | null;
+  currentQ50: number | null;
+  currentQ95: number | null;
+  currentQ99: number | null;
+  currentPercentile: number | null; // interpolated across the 7 taus, 0–100
+  goldenTop: number | null; // disl1 at the latest data point
+  goldenBottom: number | null; // disl4 at the latest data point
   modelNote: string;
   lastUpdated: number;
 }
+
+// ─── Model ─────────────────────────────────────────────────────────────────────
+
+// 7 rearranged (ascending) quantile prices for a unix-second timestamp.
+function quantilePrices(timeS: number): number[] {
+  const t = (timeS - GENESIS_S) / DAY_S; // days since Jan 1, 2009
+  const x = Math.log(Math.max(1, t)) - MU; // natural log of time, centered at MU
+  const prices = QUANTILES.map((q) => Math.pow(10, q.c + q.a * x + q.b * x * x));
+  prices.sort((p1, p2) => p1 - p2); // rearrangement — required, not cosmetic
+  return prices;
+}
+
+function buildRow(timeS: number, price: number | null): BtcQuantilePoint {
+  const p = quantilePrices(timeS);
+  const q1 = p[0];
+  return {
+    time: timeS,
+    price,
+    q01: p[0],
+    q10: p[1],
+    q25: p[2],
+    q50: p[3],
+    q75: p[4],
+    q95: p[5],
+    q99: p[6],
+    disl1: q1 * (1 + DISLOCATIONS[0]),
+    disl2: q1 * (1 + DISLOCATIONS[1]),
+    disl3: q1 * (1 + DISLOCATIONS[2]),
+    disl4: q1 * (1 + DISLOCATIONS[3]),
+  };
+}
+
+// Interpolate the percentile of a price across the 7 quantile levels (log-price space).
+// Below Q1 / above Q99 the value is extrapolated using the nearest segment slope and
+// clamped to [0, 100], so a price under the Q1% floor honestly reads below 1.
+function interpPercentile(price: number, qPrices: number[]): number {
+  const taus = QUANTILES.map((q) => q.tau * 100); // [1,10,25,50,75,95,99]
+  const n = qPrices.length;
+  const lp = Math.log(price);
+
+  // Below the bottom quantile: extrapolate down using the Q1→Q10 slope.
+  if (price <= qPrices[0]) {
+    const lo = Math.log(qPrices[0]);
+    const hi = Math.log(qPrices[1]);
+    const f = hi > lo ? (lp - lo) / (hi - lo) : 0;
+    return Math.max(0, taus[0] + f * (taus[1] - taus[0]));
+  }
+  // Above the top quantile: extrapolate up using the Q95→Q99 slope.
+  if (price >= qPrices[n - 1]) {
+    const lo = Math.log(qPrices[n - 2]);
+    const hi = Math.log(qPrices[n - 1]);
+    const f = hi > lo ? (lp - lo) / (hi - lo) : 0;
+    return Math.min(100, taus[n - 1] + f * (taus[n - 1] - taus[n - 2]));
+  }
+  for (let i = 0; i < n - 1; i++) {
+    if (price >= qPrices[i] && price <= qPrices[i + 1]) {
+      const lo = Math.log(qPrices[i]);
+      const hi = Math.log(qPrices[i + 1]);
+      const f = hi > lo ? (lp - lo) / (hi - lo) : 0;
+      return taus[i] + f * (taus[i + 1] - taus[i]);
+    }
+  }
+  return taus[n - 1];
+}
+
+// ─── Early BTC price history ──────────────────────────────────────────────────
+//
+// Yahoo Finance BTC-USD coverage starts ~Sep 2014. These monthly close prices
+// (Jul 2010 – Sep 2014) are sourced from well-documented exchange records
+// (Mt.Gox → Bitstamp) so the price line covers the full available history.
+// They are NOT used to fit anything — the bands are deterministic.
+//
+// [dateStr, USD close]
+const EARLY_BTC_PRICES: Array<[string, number]> = [
+  ["2010-07-01", 0.0584],
+  ["2010-08-01", 0.0694],
+  ["2010-09-01", 0.0614],
+  ["2010-10-01", 0.0974],
+  ["2010-11-01", 0.2378],
+  ["2010-12-01", 0.218],
+  ["2011-01-01", 0.31],
+  ["2011-02-01", 0.89],
+  ["2011-03-01", 0.99],
+  ["2011-04-01", 1.02],
+  ["2011-05-01", 6.0],
+  ["2011-06-01", 31.91], // June 2011 peak
+  ["2011-07-01", 13.4],
+  ["2011-08-01", 10.0],
+  ["2011-09-01", 5.0],
+  ["2011-10-01", 3.48],
+  ["2011-11-01", 2.52],
+  ["2011-12-01", 3.06],
+  ["2012-01-01", 6.18],
+  ["2012-02-01", 4.88],
+  ["2012-03-01", 4.89],
+  ["2012-04-01", 5.08],
+  ["2012-05-01", 5.02],
+  ["2012-06-01", 6.7],
+  ["2012-07-01", 7.14],
+  ["2012-08-01", 9.75],
+  ["2012-09-01", 12.37],
+  ["2012-10-01", 10.96],
+  ["2012-11-01", 11.6],
+  ["2012-12-01", 13.45],
+  ["2013-01-01", 15.4],
+  ["2013-02-01", 28.5],
+  ["2013-03-01", 92.0],
+  ["2013-04-01", 135.0],
+  ["2013-05-01", 118.0],
+  ["2013-06-01", 97.5],
+  ["2013-07-01", 87.0],
+  ["2013-08-01", 104.0],
+  ["2013-09-01", 126.0],
+  ["2013-10-01", 196.0],
+  ["2013-11-01", 1242.0], // November 2013 peak
+  ["2013-12-01", 710.0],
+  ["2014-01-01", 912.0],
+  ["2014-02-01", 585.0],
+  ["2014-03-01", 458.0],
+  ["2014-04-01", 440.0],
+  ["2014-05-01", 438.0],
+  ["2014-06-01", 584.0],
+  ["2014-07-01", 624.0],
+  ["2014-08-01", 510.0],
+  ["2014-09-01", 380.0],
+];
+
+// ─── Known cycle peaks ────────────────────────────────────────────────────────
+
+const PEAK_DATES: Array<{ label: string; dateStr: string }> = [
+  { label: "2011", dateStr: "2011-06-08" },
+  { label: "2013", dateStr: "2013-11-30" },
+  { label: "2017", dateStr: "2017-12-17" },
+  { label: "2021", dateStr: "2021-11-08" },
+];
 
 // ─── Yahoo Finance helper ─────────────────────────────────────────────────────
 
@@ -83,162 +253,12 @@ async function yahooChartWithRetry(
   return null;
 }
 
-// ─── Quantile regression ──────────────────────────────────────────────────────
-//
-// Fits a quantile regression via sub-gradient descent.
-// X: design matrix [n × p], y: targets [n], q: quantile ∈ (0,1)
-//
-// Uses 1/sqrt(t) step decay (provably convergent for sub-gradient methods).
-// Initialized from the OLS estimate for fast convergence.
-
-function dotVec(a: number[], b: number[]): number {
-  let s = 0;
-  for (let i = 0; i < a.length; i++) s += a[i] * b[i];
-  return s;
-}
-
-// Gaussian elimination for small p×p systems
-function solveLinear(A: number[][], b: number[]): number[] {
-  const n = A.length;
-  const aug = A.map((row, i) => [...row, b[i]]);
-  for (let col = 0; col < n; col++) {
-    let maxRow = col;
-    for (let row = col + 1; row < n; row++) {
-      if (Math.abs(aug[row][col]) > Math.abs(aug[maxRow][col])) maxRow = row;
-    }
-    [aug[col], aug[maxRow]] = [aug[maxRow], aug[col]];
-    const pivot = aug[col][col];
-    if (Math.abs(pivot) < 1e-14) continue;
-    for (let row = col + 1; row < n; row++) {
-      const f = aug[row][col] / pivot;
-      for (let j = col; j <= n; j++) aug[row][j] -= f * aug[col][j];
-    }
-  }
-  const x = new Array(n).fill(0);
-  for (let i = n - 1; i >= 0; i--) {
-    x[i] = aug[i][n];
-    for (let j = i + 1; j < n; j++) x[i] -= aug[i][j] * x[j];
-    x[i] /= aug[i][i];
-  }
-  return x;
-}
-
-function olsEstimate(X: number[][], y: number[]): number[] {
-  const p = X[0].length;
-  const XtX = Array.from({ length: p }, (_, i) =>
-    Array.from({ length: p }, (_, j) => X.reduce((s, row) => s + row[i] * row[j], 0)),
-  );
-  const Xty = Array.from({ length: p }, (_, i) =>
-    X.reduce((s, row, k) => s + row[i] * y[k], 0),
-  );
-  return solveLinear(XtX, Xty);
-}
-
-function quantileReg(X: number[][], y: number[], q: number, maxIter = 40000): number[] {
-  const n = X.length;
-  const p = X[0].length;
-  const w = olsEstimate(X, y);
-
-  for (let t = 1; t <= maxIter; t++) {
-    // Decaying step size with warm-up
-    const lr = (0.3 / Math.sqrt(t)) * (t < 100 ? t / 100 : 1);
-    const grad = new Array(p).fill(0);
-    for (let i = 0; i < n; i++) {
-      const pred = dotVec(X[i], w);
-      const r = y[i] - pred;
-      const g = r > 0 ? -q : 1 - q;
-      for (let j = 0; j < p; j++) grad[j] += g * X[i][j];
-    }
-    for (let j = 0; j < p; j++) w[j] -= (lr / n) * grad[j];
-  }
-  return w;
-}
-
-// Evaluate a (linear or quadratic) model at logDays
-function evalModel(coeffs: number[], logDays: number): number {
-  if (coeffs.length === 2) return coeffs[0] + coeffs[1] * logDays;
-  return coeffs[0] + coeffs[1] * logDays + coeffs[2] * logDays * logDays;
-}
-
-// ─── Early BTC price history ──────────────────────────────────────────────────
-//
-// Yahoo Finance BTC-USD coverage starts ~Sep 2014. These monthly close prices
-// (Jul 2010 – Sep 2014) are sourced from well-documented exchange records
-// (Mt.Gox → Bitstamp) and fill the gap so the regression and price line cover
-// the full available history including both the 2011 and 2013 cycle peaks.
-//
-// [dateStr, USD close]
-const EARLY_BTC_PRICES: Array<[string, number]> = [
-  ["2010-07-01", 0.0584],
-  ["2010-08-01", 0.0694],
-  ["2010-09-01", 0.0614],
-  ["2010-10-01", 0.0974],
-  ["2010-11-01", 0.2378],
-  ["2010-12-01", 0.2180],
-  ["2011-01-01", 0.3100],
-  ["2011-02-01", 0.8900],
-  ["2011-03-01", 0.9900],
-  ["2011-04-01", 1.0200],
-  ["2011-05-01", 6.0000],
-  ["2011-06-01", 31.9100], // June 2011 peak
-  ["2011-07-01", 13.4000],
-  ["2011-08-01", 10.0000],
-  ["2011-09-01", 5.0000],
-  ["2011-10-01", 3.4800],
-  ["2011-11-01", 2.5200],
-  ["2011-12-01", 3.0600],
-  ["2012-01-01", 6.1800],
-  ["2012-02-01", 4.8800],
-  ["2012-03-01", 4.8900],
-  ["2012-04-01", 5.0800],
-  ["2012-05-01", 5.0200],
-  ["2012-06-01", 6.7000],
-  ["2012-07-01", 7.1400],
-  ["2012-08-01", 9.7500],
-  ["2012-09-01", 12.3700],
-  ["2012-10-01", 10.9600],
-  ["2012-11-01", 11.6000],
-  ["2012-12-01", 13.4500],
-  ["2013-01-01", 15.4000],
-  ["2013-02-01", 28.5000],
-  ["2013-03-01", 92.0000],
-  ["2013-04-01", 135.0000],
-  ["2013-05-01", 118.0000],
-  ["2013-06-01", 97.5000],
-  ["2013-07-01", 87.0000],
-  ["2013-08-01", 104.0000],
-  ["2013-09-01", 126.0000],
-  ["2013-10-01", 196.0000],
-  ["2013-11-01", 1242.000], // November 2013 peak
-  ["2013-12-01", 710.0000],
-  ["2014-01-01", 912.0000],
-  ["2014-02-01", 585.0000],
-  ["2014-03-01", 458.0000],
-  ["2014-04-01", 440.0000],
-  ["2014-05-01", 438.0000],
-  ["2014-06-01", 584.0000],
-  ["2014-07-01", 624.0000],
-  ["2014-08-01", 510.0000],
-  ["2014-09-01", 380.0000],
-];
-
-// ─── Known cycle peaks ────────────────────────────────────────────────────────
-
-const PEAK_DATES: Array<{ label: string; dateStr: string }> = [
-  { label: "2011", dateStr: "2011-06-08" },
-  { label: "2013", dateStr: "2013-11-30" },
-  { label: "2017", dateStr: "2017-12-17" },
-  { label: "2021", dateStr: "2021-11-08" },
-];
-
 // ─── Main entry ───────────────────────────────────────────────────────────────
 
 export async function fetchBtcQuantilePayload(): Promise<BtcQuantilePayload> {
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
 
-  // Start from the earliest date Yahoo Finance may have BTC-USD data; the
-  // actual series will begin wherever Yahoo's coverage starts (~Sep 2014).
   const raw = await yahooChartWithRetry("BTC-USD", {
     period1: "2010-01-01",
     period2: todayStr,
@@ -269,92 +289,32 @@ export async function fetchBtcQuantilePayload(): Promise<BtcQuantilePayload> {
   const sorted = [...priceMap.entries()].sort((a, b) => a[0] - b[0]);
   if (sorted.length < 20) throw new Error("Insufficient BTC price history");
 
-  // Transform to log-log space
   const times = sorted.map(([t]) => t);
   const prices = sorted.map(([, p]) => p);
-  const logDaysArr = times.map((t) => Math.log(Math.max(1, (t - GENESIS_S) / DAY_S)));
-  const logPrices = prices.map((p) => Math.log(p));
-
-  // Center log-days for numerical conditioning. Without centering, x≈8 and x²≈67
-  // have very different scales from the intercept, causing gradient oscillation in the
-  // quadratic fit. Centering brings all features to ~[-1, 1].
-  const xMean = logDaysArr.reduce((s, x) => s + x, 0) / logDaysArr.length;
-  const logDaysCentered = logDaysArr.map((x) => x - xMean);
-
-  // Design matrices in centered space
-  const Xlin: number[][] = logDaysCentered.map((xc) => [1, xc]);
-  const Xquad: number[][] = logDaysCentered.map((xc) => [1, xc, xc * xc]);
-
-  logger.info({ n: sorted.length, xMean }, "btcQuantile: fitting quantile regression");
-
-  const lowerCentered = quantileReg(Xlin, logPrices, 0.1);
-  const medianCentered = quantileReg(Xlin, logPrices, 0.5);
-  const upperCentered = quantileReg(Xquad, logPrices, 0.9);
-
-  // Convert centered coefficients back to uncentered parametrization so evalModel
-  // can use raw log(days) without needing xMean at query time.
-  //   Linear:    a0 + a1*(x-μ)   → (a0 - a1*μ) + a1*x
-  //   Quadratic: a0 + a1*(x-μ) + a2*(x-μ)² →
-  //              (a0 - a1*μ + a2*μ²) + (a1 - 2*a2*μ)*x + a2*x²
-  function uncenterLinear(a: number[], mu: number): number[] {
-    return [a[0] - a[1] * mu, a[1]];
-  }
-  function uncenterQuadratic(a: number[], mu: number): number[] {
-    return [
-      a[0] - a[1] * mu + a[2] * mu * mu,
-      a[1] - 2 * a[2] * mu,
-      a[2],
-    ];
-  }
-
-  const lowerCoeffs = uncenterLinear(lowerCentered, xMean);
-  const medianCoeffs = uncenterLinear(medianCentered, xMean);
-  const upperCoeffs = uncenterQuadratic(upperCentered, xMean);
-
-  logger.info(
-    { lowerCoeffs, medianCoeffs, upperCoeffs },
-    "btcQuantile: regression complete",
-  );
-
-  // ─── Build series ─────────────────────────────────────────────────────────
-
   const lastTime = times[times.length - 1];
 
-  // All data points now have real prices (early history + Yahoo).
-  // No null-price pre-data prefix needed.
+  // ─── Build series ─────────────────────────────────────────────────────────
+  // Historical rows carry real prices; the bands are the deterministic model.
   const series: BtcQuantilePoint[] = [];
   for (let i = 0; i < times.length; i++) {
-    const t = times[i];
-    const ld = logDaysArr[i];
-    series.push({
-      time: t,
-      price: prices[i],
-      lower: Math.exp(evalModel(lowerCoeffs, ld)),
-      median: Math.exp(evalModel(medianCoeffs, ld)),
-      upper: Math.exp(evalModel(upperCoeffs, ld)),
-    });
+    series.push(buildRow(times[i], prices[i]));
   }
 
-  // 2-year weekly projection beyond last data point
+  // 2-year weekly projection beyond the last data point. price = null so the
+  // price line stops at the last real point while the bands continue. The
+  // ascending rearrangement runs on these rows too (handles the Q75/Q95
+  // crossing around Dec 2026).
   const projEndTime = lastTime + 2 * 365 * DAY_S;
   for (let t = lastTime + WEEK_S; t <= projEndTime; t += WEEK_S) {
-    const ld = Math.log(Math.max(1, (t - GENESIS_S) / DAY_S));
-    series.push({
-      time: t,
-      price: null,
-      lower: Math.exp(evalModel(lowerCoeffs, ld)),
-      median: Math.exp(evalModel(medianCoeffs, ld)),
-      upper: Math.exp(evalModel(upperCoeffs, ld)),
-    });
+    series.push(buildRow(t, null));
   }
 
   // ─── Cycle peaks ──────────────────────────────────────────────────────────
-
   const cyclePeaks: BtcCyclePeak[] = [];
   for (const { label, dateStr } of PEAK_DATES) {
     const targetS = Math.floor(new Date(dateStr + "T00:00:00Z").getTime() / 1000);
 
-    // Try to locate the peak in the available price data (within ±4 weeks of target date)
+    // Locate the nearest data point within ±4 weeks of the target date.
     let bestIdx = -1;
     let bestDelta = Infinity;
     for (let i = 0; i < times.length; i++) {
@@ -364,10 +324,9 @@ export async function fetchBtcQuantilePayload(): Promise<BtcQuantilePayload> {
         bestIdx = i;
       }
     }
+    if (bestIdx === -1) continue;
 
-    if (bestIdx === -1) continue; // peak not in dataset window — skip
-
-    // Search local max within ±6 bars of the nearest match
+    // Search the local max within ±6 bars of the nearest match.
     const window = 6;
     let maxIdx = bestIdx;
     for (
@@ -379,56 +338,58 @@ export async function fetchBtcQuantilePayload(): Promise<BtcQuantilePayload> {
     }
     const peakTime = times[maxIdx];
     const peakPrice = prices[maxIdx];
-    const peakLogDays = logDaysArr[maxIdx];
-
-    const upperBand = Math.exp(evalModel(upperCoeffs, peakLogDays));
-    const pctOfUpper = peakPrice / upperBand;
-    cyclePeaks.push({ time: peakTime, price: peakPrice, label, upperBand, pctOfUpper });
+    const q99 = quantilePrices(peakTime)[6];
+    cyclePeaks.push({ time: peakTime, price: peakPrice, label, q99, pctOfQ99: peakPrice / q99 });
   }
 
   // ─── Current position ─────────────────────────────────────────────────────
-  // series = [...historical (early+Yahoo), ...projection]; find the last entry
-  // that has a real price (i.e. the last historical weekly close).
-
   const lastHistPt = series.filter((p) => p.price != null).at(-1);
   if (!lastHistPt) throw new Error("No historical price data found in series");
 
   const currentPrice = lastHistPt.price;
-  const currentLower = lastHistPt.lower;
-  const currentMedian = lastHistPt.median;
-  const currentUpper = lastHistPt.upper;
+  const currentQ01 = lastHistPt.q01;
+  const currentQ10 = lastHistPt.q10;
+  const currentQ50 = lastHistPt.q50;
+  const currentQ95 = lastHistPt.q95;
+  const currentQ99 = lastHistPt.q99;
+  const goldenTop = lastHistPt.disl1;
+  const goldenBottom = lastHistPt.disl4;
 
   let currentPercentile: number | null = null;
-  if (currentPrice != null && currentLower > 0 && currentUpper > currentLower) {
-    const logCur = Math.log(currentPrice);
-    const logLo = Math.log(currentLower);
-    const logHi = Math.log(currentUpper);
-    currentPercentile = Math.max(
-      0,
-      Math.min(100, ((logCur - logLo) / (logHi - logLo)) * 100),
-    );
+  if (currentPrice != null) {
+    const qp = [
+      lastHistPt.q01,
+      lastHistPt.q10,
+      lastHistPt.q25,
+      lastHistPt.q50,
+      lastHistPt.q75,
+      lastHistPt.q95,
+      lastHistPt.q99,
+    ];
+    currentPercentile = interpPercentile(currentPrice, qp);
   }
 
-  const curveDir = upperCoeffs[2] < 0 ? "inward (compression)" : "outward";
   const modelNote =
-    `Asymmetric quantile regression in log-log space. ` +
-    `Lower band (q=0.10): linear power law. ` +
-    `Median (q=0.50): linear power law. ` +
-    `Upper band (q=0.90): quadratic — curvature ${upperCoeffs[2].toFixed(4)} (${curveDir}). ` +
-    `Fitted on ${sorted.length} weekly observations. ` +
-    `Not a price forecast or floor — a distributional characterization of where price has historically traded.`;
+    `Deterministic fixed-coefficient quantile model (Table 3). Seven quantiles ` +
+    `(τ = 1%, 10%, 25%, 50%, 75%, 95%, 99%) of the form log₁₀(price) = c + a·x + b·x², ` +
+    `where x = ln(days since Jan 1 2009) − ${MU}. Quantiles are rearranged (sorted ` +
+    `ascending per date) to enforce non-crossing. Nothing is fit at runtime — the ` +
+    `coefficients are fixed. Price line: Yahoo Finance BTC-USD weekly closes plus ` +
+    `documented monthly exchange data for Jul 2010 – Sep 2014. Not a forecast or a ` +
+    `floor — a distributional characterization of where price has historically traded.`;
 
   return {
     series,
     cyclePeaks,
     currentPrice,
-    currentLower,
-    currentMedian,
-    currentUpper,
+    currentQ01,
+    currentQ10,
+    currentQ50,
+    currentQ95,
+    currentQ99,
     currentPercentile,
-    lowerCoeffs,
-    medianCoeffs,
-    upperCoeffs,
+    goldenTop,
+    goldenBottom,
     modelNote,
     lastUpdated: Math.floor(Date.now() / 1000),
   };

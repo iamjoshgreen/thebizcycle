@@ -14,10 +14,10 @@ export interface BtcCyclePeak {
   time: number;
   /** Actual BTC price at the peak */
   price: number;
-  /** Human-readable label e.g. "2021 Peak" */
+  /** Human-readable label e.g. "2021" */
   label: string;
-  /** Upper band (q=0.90) value at the time of the peak */
-  upperBand: number;
-  /** price / upperBand — fraction of the upper band the peak reached (diminishing across cycles) */
-  pctOfUpper: number;
+  /** Q99% band value at the time of the peak */
+  q99: number;
+  /** price / q99 — fraction of the top quantile the peak reached (diminishing across cycles) */
+  pctOfQ99: number;
 }

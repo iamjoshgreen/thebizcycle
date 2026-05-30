@@ -1235,16 +1235,24 @@ export const GetBtcQuantileResponse = zod.object({
             .number()
             .nullable()
             .describe("Actual BTC-USD close price; null for projection points"),
-          lower: zod.number().describe("q=0.10 band price (linear power law)"),
-          median: zod.number().describe("q=0.50 band price (linear power law)"),
-          upper: zod
+          q01: zod
             .number()
-            .describe(
-              "q=0.90 band price (quadratic — compresses inward over time)",
-            ),
+            .describe("1% quantile price (10^(c+a·x+b·x²)), rearranged"),
+          q10: zod.number().describe("10% quantile price, rearranged"),
+          q25: zod.number().describe("25% quantile price, rearranged"),
+          q50: zod.number().describe("50% (median) quantile price, rearranged"),
+          q75: zod.number().describe("75% quantile price, rearranged"),
+          q95: zod.number().describe("95% quantile price, rearranged"),
+          q99: zod.number().describe("99% quantile price, rearranged"),
+          disl1: zod
+            .number()
+            .describe("Dislocation line 1, q01 × (1 − 0.0735)"),
+          disl2: zod.number().describe("Dislocation line 2, q01 × (1 − 0.174)"),
+          disl3: zod.number().describe("Dislocation line 3, q01 × (1 − 0.226)"),
+          disl4: zod.number().describe("Dislocation line 4, q01 × (1 − 0.346)"),
         })
         .describe(
-          "One time point in the BTC quantile band series. price is null for projection points beyond the last historical observation.",
+          "One time point in the BTC quantile band series. price is null for projection points beyond the last historical observation. The seven q\* values are deterministic Table 3 quantiles, rearranged (sorted ascending) per date.",
         ),
     )
     .describe(
@@ -1256,16 +1264,12 @@ export const GetBtcQuantileResponse = zod.object({
         .object({
           time: zod.number().describe("Unix seconds of the peak"),
           price: zod.number().describe("Actual BTC price at the peak"),
-          label: zod
-            .string()
-            .describe('Human-readable label e.g. \"2021 Peak\"'),
-          upperBand: zod
-            .number()
-            .describe("Upper band (q=0.90) value at the time of the peak"),
-          pctOfUpper: zod
+          label: zod.string().describe('Human-readable label e.g. \"2021\"'),
+          q99: zod.number().describe("Q99% band value at the time of the peak"),
+          pctOfQ99: zod
             .number()
             .describe(
-              "price \/ upperBand — fraction of the upper band the peak reached (diminishing across cycles)",
+              "price \/ q99 — fraction of the top quantile the peak reached (diminishing across cycles)",
             ),
         })
         .describe(
@@ -1274,37 +1278,40 @@ export const GetBtcQuantileResponse = zod.object({
     )
     .describe("Known cycle peaks with their band context"),
   currentPrice: zod.number().nullable().describe("Latest BTC-USD weekly close"),
-  currentLower: zod
+  currentQ01: zod
     .number()
     .nullable()
-    .describe("q=0.10 band at the latest data point"),
-  currentMedian: zod
+    .describe("1% quantile at the latest data point"),
+  currentQ10: zod
     .number()
     .nullable()
-    .describe("q=0.50 band at the latest data point"),
-  currentUpper: zod
+    .describe("10% quantile at the latest data point"),
+  currentQ50: zod
     .number()
     .nullable()
-    .describe("q=0.90 band at the latest data point"),
+    .describe("50% (median) quantile at the latest data point"),
+  currentQ95: zod
+    .number()
+    .nullable()
+    .describe("95% quantile at the latest data point"),
+  currentQ99: zod
+    .number()
+    .nullable()
+    .describe("99% quantile at the latest data point"),
   currentPercentile: zod
     .number()
     .nullable()
-    .describe("Current price position between lower and upper band, 0-100"),
-  lowerCoeffs: zod
-    .array(zod.number())
     .describe(
-      "Linear quantile regression coefficients [intercept, slope] in log-log space for q=0.10",
+      "Interpolated percentile of current price across the 7 taus, 0-100",
     ),
-  medianCoeffs: zod
-    .array(zod.number())
-    .describe(
-      "Linear quantile regression coefficients [intercept, slope] in log-log space for q=0.50",
-    ),
-  upperCoeffs: zod
-    .array(zod.number())
-    .describe(
-      "Quadratic quantile regression coefficients [intercept, slope, curvature] in log-log space for q=0.90",
-    ),
+  goldenTop: zod
+    .number()
+    .nullable()
+    .describe("Golden zone upper bound (disl1) at the latest data point"),
+  goldenBottom: zod
+    .number()
+    .nullable()
+    .describe("Golden zone lower bound (disl4) at the latest data point"),
   modelNote: zod
     .string()
     .describe(
@@ -1328,16 +1335,24 @@ export const RefreshBtcQuantileResponse = zod.object({
             .number()
             .nullable()
             .describe("Actual BTC-USD close price; null for projection points"),
-          lower: zod.number().describe("q=0.10 band price (linear power law)"),
-          median: zod.number().describe("q=0.50 band price (linear power law)"),
-          upper: zod
+          q01: zod
             .number()
-            .describe(
-              "q=0.90 band price (quadratic — compresses inward over time)",
-            ),
+            .describe("1% quantile price (10^(c+a·x+b·x²)), rearranged"),
+          q10: zod.number().describe("10% quantile price, rearranged"),
+          q25: zod.number().describe("25% quantile price, rearranged"),
+          q50: zod.number().describe("50% (median) quantile price, rearranged"),
+          q75: zod.number().describe("75% quantile price, rearranged"),
+          q95: zod.number().describe("95% quantile price, rearranged"),
+          q99: zod.number().describe("99% quantile price, rearranged"),
+          disl1: zod
+            .number()
+            .describe("Dislocation line 1, q01 × (1 − 0.0735)"),
+          disl2: zod.number().describe("Dislocation line 2, q01 × (1 − 0.174)"),
+          disl3: zod.number().describe("Dislocation line 3, q01 × (1 − 0.226)"),
+          disl4: zod.number().describe("Dislocation line 4, q01 × (1 − 0.346)"),
         })
         .describe(
-          "One time point in the BTC quantile band series. price is null for projection points beyond the last historical observation.",
+          "One time point in the BTC quantile band series. price is null for projection points beyond the last historical observation. The seven q\* values are deterministic Table 3 quantiles, rearranged (sorted ascending) per date.",
         ),
     )
     .describe(
@@ -1349,16 +1364,12 @@ export const RefreshBtcQuantileResponse = zod.object({
         .object({
           time: zod.number().describe("Unix seconds of the peak"),
           price: zod.number().describe("Actual BTC price at the peak"),
-          label: zod
-            .string()
-            .describe('Human-readable label e.g. \"2021 Peak\"'),
-          upperBand: zod
-            .number()
-            .describe("Upper band (q=0.90) value at the time of the peak"),
-          pctOfUpper: zod
+          label: zod.string().describe('Human-readable label e.g. \"2021\"'),
+          q99: zod.number().describe("Q99% band value at the time of the peak"),
+          pctOfQ99: zod
             .number()
             .describe(
-              "price \/ upperBand — fraction of the upper band the peak reached (diminishing across cycles)",
+              "price \/ q99 — fraction of the top quantile the peak reached (diminishing across cycles)",
             ),
         })
         .describe(
@@ -1367,37 +1378,40 @@ export const RefreshBtcQuantileResponse = zod.object({
     )
     .describe("Known cycle peaks with their band context"),
   currentPrice: zod.number().nullable().describe("Latest BTC-USD weekly close"),
-  currentLower: zod
+  currentQ01: zod
     .number()
     .nullable()
-    .describe("q=0.10 band at the latest data point"),
-  currentMedian: zod
+    .describe("1% quantile at the latest data point"),
+  currentQ10: zod
     .number()
     .nullable()
-    .describe("q=0.50 band at the latest data point"),
-  currentUpper: zod
+    .describe("10% quantile at the latest data point"),
+  currentQ50: zod
     .number()
     .nullable()
-    .describe("q=0.90 band at the latest data point"),
+    .describe("50% (median) quantile at the latest data point"),
+  currentQ95: zod
+    .number()
+    .nullable()
+    .describe("95% quantile at the latest data point"),
+  currentQ99: zod
+    .number()
+    .nullable()
+    .describe("99% quantile at the latest data point"),
   currentPercentile: zod
     .number()
     .nullable()
-    .describe("Current price position between lower and upper band, 0-100"),
-  lowerCoeffs: zod
-    .array(zod.number())
     .describe(
-      "Linear quantile regression coefficients [intercept, slope] in log-log space for q=0.10",
+      "Interpolated percentile of current price across the 7 taus, 0-100",
     ),
-  medianCoeffs: zod
-    .array(zod.number())
-    .describe(
-      "Linear quantile regression coefficients [intercept, slope] in log-log space for q=0.50",
-    ),
-  upperCoeffs: zod
-    .array(zod.number())
-    .describe(
-      "Quadratic quantile regression coefficients [intercept, slope, curvature] in log-log space for q=0.90",
-    ),
+  goldenTop: zod
+    .number()
+    .nullable()
+    .describe("Golden zone upper bound (disl1) at the latest data point"),
+  goldenBottom: zod
+    .number()
+    .nullable()
+    .describe("Golden zone lower bound (disl4) at the latest data point"),
   modelNote: zod
     .string()
     .describe(

@@ -56,13 +56,30 @@ function ordinal(n: number): string {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
+//
+// Display x-axis transform. This is the GENESIS used only for the log-time axis —
+// it is intentionally separate from the model's anchor (the model uses its own
+// fixed constants inside the backend). Jan 1, 2009 matches the model anchor.
 
-const GENESIS_S = Math.floor(new Date("2009-01-03T00:00:00Z").getTime() / 1000);
+const GENESIS_S = Math.floor(Date.UTC(2009, 0, 1) / 1000);
 const DAY_S = 86400;
 
 function toLogDays(unixSec: number): number {
   return Math.log(Math.max(1, (unixSec - GENESIS_S) / DAY_S));
 }
+
+// Seven-quantile fan, colored dark green → dark red to match the paper's Figure 1.
+const QLINES: Array<{ key: keyof BtcQuantilePoint; color: string; label: string }> = [
+  { key: "q01", color: "#1a6b2f", label: "1%" },
+  { key: "q10", color: "#4a9d4f", label: "10%" },
+  { key: "q25", color: "#8cc34f", label: "25%" },
+  { key: "q50", color: "#c8b94a", label: "50%" },
+  { key: "q75", color: "#e09a3e", label: "75%" },
+  { key: "q95", color: "#d35f3a", label: "95%" },
+  { key: "q99", color: "#a52828", label: "99%" },
+];
+
+const GOLD = "#d4af37";
 
 // ─── Chart ────────────────────────────────────────────────────────────────────
 //
@@ -70,45 +87,47 @@ function toLogDays(unixSec: number): number {
 //   X-axis = log(days since genesis)  →  XAxis type="number" (linear over pre-transformed values)
 //   Y-axis = log(price)               →  YAxis scale="log" (Recharts handles the log transform)
 //
-// Both axes are logarithmic; the bands appear as straight/curved lines in log-log space
-// exactly as the quantile regression models them.
-//
-// Two-zone band fill achieved by layering four Area components in order:
-//   1. upperFill  → red tint fills from chart bottom up to the upper band
-//   2. medFillA   → background color erases from chart bottom up to median
-//   3. medFillB   → green tint fills from chart bottom up to median
-//   4. lowerFill  → background color erases from chart bottom up to lower
-//
-// Net effect: red region between median and upper, green region between lower and median.
+// Layers (back → front):
+//   1. golden dislocation zone (Area between disl1 top and disl4 bottom)
+//   2. four dashed dislocation lines below q01
+//   3. seven-quantile fan (q01..q99), no fills between them
+//   4. BTC price line on top
 
 interface ChartProps {
   series: BtcQuantilePoint[];
   cyclePeaks: BtcCyclePeak[];
 }
 
-const Y_TICKS = [1, 5, 10, 50, 100, 300, 1_000, 3_000, 10_000, 30_000, 100_000, 300_000, 1_000_000];
+const Y_TICKS = [
+  0.1, 0.3, 1, 5, 10, 50, 100, 300, 1_000, 3_000, 10_000, 30_000, 100_000, 300_000, 1_000_000,
+];
 
 function fmtYTick(v: number): string {
   if (v >= 1_000_000) return `$${v / 1_000_000}M`;
   if (v >= 1_000) return `$${v / 1_000}K`;
+  if (v < 1) return `$${v}`;
   return `$${v}`;
 }
 
 type ChartDatum = {
-  ld: number;       // log(days since genesis) — the X coordinate
+  ld: number; // log(days since genesis) — the X coordinate
   price?: number;
-  upper: number;
-  upperFill: number;
-  median: number;
-  medFillA: number;
-  medFillB: number;
-  lower: number;
-  lowerFill: number;
+  q01: number;
+  q10: number;
+  q25: number;
+  q50: number;
+  q75: number;
+  q95: number;
+  q99: number;
+  disl1: number;
+  disl2: number;
+  disl3: number;
+  disl4: number;
+  gold: [number, number]; // [disl4 (bottom), disl1 (top)]
 };
 
 function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
   const mono = "'JetBrains Mono', monospace";
-  const bg = "hsl(230, 14%, 8%)";
   const nowSec = Math.floor(Date.now() / 1000);
 
   if (series.length < 4) {
@@ -129,36 +148,38 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
     );
   }
 
-  const chartData: ChartDatum[] = series.map((p) => {
-    const ld = toLogDays(p.time);
-    return {
-      ld,
-      price: p.price ?? undefined,
-      upper: p.upper,
-      upperFill: p.upper,
-      median: p.median,
-      medFillA: p.median,
-      medFillB: p.median,
-      lower: p.lower,
-      lowerFill: p.lower,
-    };
-  });
+  const chartData: ChartDatum[] = series.map((p) => ({
+    ld: toLogDays(p.time),
+    price: p.price ?? undefined,
+    q01: p.q01,
+    q10: p.q10,
+    q25: p.q25,
+    q50: p.q50,
+    q75: p.q75,
+    q95: p.q95,
+    q99: p.q99,
+    disl1: p.disl1,
+    disl2: p.disl2,
+    disl3: p.disl3,
+    disl4: p.disl4,
+    gold: [p.disl4, p.disl1],
+  }));
 
   const histSeries = series.filter((p) => p.price != null);
   const lastHistLd = toLogDays(histSeries[histSeries.length - 1]?.time ?? nowSec);
   const nowLd = toLogDays(nowSec);
 
-  // Y domain
+  // Y domain — include dislocation floor (disl4) up to the top quantile (q99).
   const allVals = series.flatMap((p) => [
-    p.lower,
-    p.upper,
+    p.disl4,
+    p.q99,
     ...(p.price != null ? [p.price] : []),
   ]);
-  const yMin = Math.min(...allVals) * 0.65;
-  const yMax = Math.max(...allVals) * 1.5;
+  const yMin = Math.min(...allVals) * 0.7;
+  const yMax = Math.max(...allVals) * 1.4;
   const yTicks = Y_TICKS.filter((t) => t >= yMin * 0.9 && t <= yMax * 1.1);
 
-  // X domain (logDays) — spans from first series point (near genesis) to end of projection
+  // X domain (logDays) — spans from first series point to end of projection
   const xMin = chartData[0].ld;
   const xMax = chartData[chartData.length - 1].ld;
 
@@ -173,7 +194,6 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
     if (ld >= xMin && ld <= xMax) yearTicks.push(ld);
   }
 
-  // Cycle peaks: all are now within the extended domain (series starts from genesis)
   const peakAnnotations = cyclePeaks.map((p) => ({
     ...p,
     ld: toLogDays(p.time),
@@ -182,22 +202,33 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
   return (
     <div>
       {/* Legend */}
-      <div style={{ display: "flex", gap: 20, padding: "0 0 10px 76px", flexWrap: "wrap" }}>
-        {[
-          { label: "q=0.90 (upper)", color: "rgba(239,100,100,0.8)", dash: "5 4" },
-          { label: "q=0.50 (median)", color: "rgba(180,180,200,0.5)", dash: "3 4" },
-          { label: "q=0.10 (lower)", color: "rgba(52,211,153,0.8)", dash: "5 4" },
-          { label: "BTC price", color: "rgba(247,147,26,0.9)", dash: "" },
-        ].map((item) => (
-          <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <svg width="20" height="10">
-              <line x1={0} y1={5} x2={20} y2={5} stroke={item.color} strokeWidth={item.dash ? 1.2 : 1.6} strokeDasharray={item.dash || undefined} />
+      <div style={{ display: "flex", gap: 14, padding: "0 0 10px 76px", flexWrap: "wrap" }}>
+        {QLINES.map((q) => (
+          <div key={q.key} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <svg width="18" height="10">
+              <line x1={0} y1={5} x2={18} y2={5} stroke={q.color} strokeWidth={1.8} />
             </svg>
             <span style={{ fontSize: 9, fontFamily: mono, color: "rgba(180,180,200,0.6)" }}>
-              {item.label}
+              {q.label}
             </span>
           </div>
         ))}
+        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <svg width="18" height="10">
+            <rect x={0} y={2} width={18} height={6} fill={GOLD} fillOpacity={0.18} />
+          </svg>
+          <span style={{ fontSize: 9, fontFamily: mono, color: "rgba(180,180,200,0.6)" }}>
+            dislocation zone
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <svg width="18" height="10">
+            <line x1={0} y1={5} x2={18} y2={5} stroke="rgba(247,147,26,0.9)" strokeWidth={1.8} />
+          </svg>
+          <span style={{ fontSize: 9, fontFamily: mono, color: "rgba(180,180,200,0.6)" }}>
+            BTC price
+          </span>
+        </div>
       </div>
 
       <ResponsiveContainer width="100%" height={500}>
@@ -209,7 +240,6 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
             domain={[xMin, xMax]}
             ticks={yearTicks}
             tickFormatter={(ld: number) => {
-              // Reverse-map logDays → approximate year for label
               const days = Math.exp(ld);
               const t = GENESIS_S + days * DAY_S;
               return String(new Date(t * 1000).getUTCFullYear());
@@ -232,26 +262,62 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
             allowDataOverflow
           />
 
-          {/* Projection zone: from last real data to end of projection */}
+          {/* Projection zone shading */}
           <ReferenceArea x1={lastHistLd} x2={xMax} fill="rgba(180,180,200,0.025)" stroke="none" />
 
-          {/* Two-zone band fill (4 layered Areas):
-              Layer 1: red tint fills up to upper band
-              Layer 2: bg erases up to median (leaves only upper→median in red)
-              Layer 3: green tint fills up to median
-              Layer 4: bg erases up to lower (leaves only median→lower in green) */}
-          <Area type="monotone" dataKey="upperFill" fill="rgba(239,100,100,0.08)" stroke="none" dot={false} isAnimationActive={false} legendType="none" />
-          <Area type="monotone" dataKey="medFillA"  fill={bg}                      stroke="none" dot={false} isAnimationActive={false} legendType="none" />
-          <Area type="monotone" dataKey="medFillB"  fill="rgba(52,211,153,0.06)"  stroke="none" dot={false} isAnimationActive={false} legendType="none" />
-          <Area type="monotone" dataKey="lowerFill" fill={bg}                      stroke="none" dot={false} isAnimationActive={false} legendType="none" />
+          {/* Golden dislocation zone: Area between disl4 (bottom) and disl1 (top) */}
+          <Area
+            type="monotone"
+            dataKey="gold"
+            fill={GOLD}
+            fillOpacity={0.16}
+            stroke="none"
+            dot={false}
+            isAnimationActive={false}
+            legendType="none"
+          />
 
-          {/* Quantile band lines */}
-          <Line type="monotone" dataKey="upper"  stroke="rgba(239,100,100,0.7)"  strokeDasharray="5 4" strokeWidth={1.25} dot={false} isAnimationActive={false} legendType="none" />
-          <Line type="monotone" dataKey="median" stroke="rgba(180,180,200,0.4)"  strokeDasharray="3 4" strokeWidth={1}    dot={false} isAnimationActive={false} legendType="none" />
-          <Line type="monotone" dataKey="lower"  stroke="rgba(52,211,153,0.7)"   strokeDasharray="5 4" strokeWidth={1.25} dot={false} isAnimationActive={false} legendType="none" />
+          {/* Four dashed dislocation lines below q01 */}
+          {(["disl1", "disl2", "disl3", "disl4"] as const).map((k) => (
+            <Line
+              key={k}
+              type="monotone"
+              dataKey={k}
+              stroke={GOLD}
+              strokeOpacity={0.55}
+              strokeDasharray="4 4"
+              strokeWidth={0.9}
+              dot={false}
+              isAnimationActive={false}
+              legendType="none"
+            />
+          ))}
+
+          {/* Seven-quantile fan (no fills between) */}
+          {QLINES.map((q) => (
+            <Line
+              key={q.key}
+              type="monotone"
+              dataKey={q.key}
+              stroke={q.color}
+              strokeWidth={1.4}
+              dot={false}
+              isAnimationActive={false}
+              legendType="none"
+            />
+          ))}
 
           {/* BTC price (null values leave a natural gap in the projection zone) */}
-          <Line type="monotone" dataKey="price" stroke="rgba(247,147,26,0.9)" strokeWidth={1.6} dot={false} isAnimationActive={false} connectNulls={false} legendType="none" />
+          <Line
+            type="monotone"
+            dataKey="price"
+            stroke="rgba(247,147,26,0.95)"
+            strokeWidth={1.7}
+            dot={false}
+            isAnimationActive={false}
+            connectNulls={false}
+            legendType="none"
+          />
 
           {/* Today marker */}
           {nowLd >= xMin && nowLd <= xMax && (
@@ -362,8 +428,8 @@ function PercentileBar({ pct }: { pct: number | null | undefined }) {
           marginBottom: 5,
         }}
       >
-        <span>Support (q=0.10)</span>
-        <span>Resistance (q=0.90)</span>
+        <span>Q1% (floor)</span>
+        <span>Q99% (top)</span>
       </div>
       <div
         style={{
@@ -410,7 +476,7 @@ function PercentileBar({ pct }: { pct: number | null | undefined }) {
           fontWeight: 700,
         }}
       >
-        {ordinal(clamped)} percentile between support and resistance bands
+        {ordinal(clamped)} percentile across the Q1%–Q99% quantile fan
       </div>
     </div>
   );
@@ -442,7 +508,7 @@ function CyclePeaksTable({ peaks }: { peaks: BtcCyclePeak[] }) {
       >
         <thead>
           <tr>
-            {["Cycle Peak", "Date", "Peak Price", "Upper Band", "% of Upper Band"].map(
+            {["Cycle Peak", "Date", "Peak Price", "Q99% Band", "% of Q99%"].map(
               (h) => (
                 <th
                   key={h}
@@ -466,9 +532,9 @@ function CyclePeaksTable({ peaks }: { peaks: BtcCyclePeak[] }) {
         <tbody>
           {peaks.map((p) => {
             const pctColor =
-              p.pctOfUpper > 0.85
+              p.pctOfQ99 > 0.85
                 ? "rgba(52,211,153,0.9)"
-                : p.pctOfUpper > 0.65
+                : p.pctOfQ99 > 0.65
                 ? "rgba(245,158,11,0.9)"
                 : "rgba(239,100,100,0.9)";
             return (
@@ -484,9 +550,9 @@ function CyclePeaksTable({ peaks }: { peaks: BtcCyclePeak[] }) {
                   })}
                 </td>
                 <td style={numCell}>{fmtPrice(p.price)}</td>
-                <td style={numCell}>{fmtPrice(p.upperBand)}</td>
+                <td style={numCell}>{fmtPrice(p.q99)}</td>
                 <td style={{ ...numCell, color: pctColor, fontWeight: 700 }}>
-                  {(p.pctOfUpper * 100).toFixed(1)}%
+                  {(p.pctOfQ99 * 100).toFixed(1)}%
                 </td>
               </tr>
             );
@@ -541,16 +607,16 @@ export default function BtcQuantilePage() {
       ? `${ordinal(Math.round(data.currentPercentile))} pct.`
       : "—";
 
-  // % gap to upper band
+  // % gap from current price up to the Q95 band
   const gapToUpper =
-    data?.currentPrice != null && data?.currentUpper != null && data.currentUpper > 0
-      ? ((data.currentUpper - data.currentPrice) / data.currentPrice) * 100
+    data?.currentPrice != null && data?.currentQ95 != null && data.currentQ95 > 0
+      ? ((data.currentQ95 - data.currentPrice) / data.currentPrice) * 100
       : null;
 
-  // gap from current price to lower band (positive = lower band is above price = unusual)
+  // gap from current price to Q10 band (positive = Q10 is above price = unusually low)
   const gapToLower =
-    data?.currentPrice != null && data?.currentLower != null && data.currentLower > 0
-      ? ((data.currentLower - data.currentPrice) / data.currentPrice) * 100
+    data?.currentPrice != null && data?.currentQ10 != null && data.currentQ10 > 0
+      ? ((data.currentQ10 - data.currentPrice) / data.currentPrice) * 100
       : null;
 
   const lowerBandSub =
@@ -600,8 +666,9 @@ export default function BtcQuantilePage() {
               maxWidth: 640,
             }}
           >
-            Log-log quantile regression on Bitcoin's full price history. The upper band
-            curves inward across cycles; the lower band holds as a near-straight power law.
+            Seven fixed-coefficient quantiles (Table 3) of Bitcoin's price in log-log space.
+            The upper quantiles curve inward across cycles — the asymmetric tail curvature —
+            while the lower quantiles hold a near-straight power law. Deterministic, not fitted.
           </p>
         </div>
 
@@ -626,12 +693,12 @@ export default function BtcQuantilePage() {
               accent="rgba(247,147,26,0.95)"
             />
             <StatCard
-              label="Band Position"
+              label="Quantile Position"
               value={pctDisplay}
               sub={
-                data.currentPercentile != null && gapToLower != null && gapToLower > 0
-                  ? "below q=0.10 support band"
-                  : "between q=0.10 and q=0.90"
+                data.currentPercentile != null && data.currentPercentile < 1
+                  ? "below the Q1% floor"
+                  : "within the Q1%–Q99% fan"
               }
               accent={
                 data.currentPercentile != null
@@ -644,18 +711,18 @@ export default function BtcQuantilePage() {
               }
             />
             <StatCard
-              label="Upper Band (q=0.90)"
-              value={fmtPrice(data.currentUpper)}
+              label="Q95% Band"
+              value={fmtPrice(data.currentQ95)}
               sub={gapToUpper != null ? `${fmtPct(gapToUpper)} above current price` : undefined}
-              accent="rgba(239,100,100,0.8)"
+              accent="rgba(211,95,58,0.85)"
             />
             <StatCard
-              label="Lower Band (q=0.10)"
-              value={fmtPrice(data.currentLower)}
+              label="Q10% Band"
+              value={fmtPrice(data.currentQ10)}
               sub={lowerBandSub}
-              accent="rgba(52,211,153,0.8)"
+              accent="rgba(74,157,79,0.85)"
             />
-            <StatCard label="Median (q=0.50)" value={fmtPrice(data.currentMedian)} />
+            <StatCard label="Q50% Median" value={fmtPrice(data.currentQ50)} accent="rgba(200,185,74,0.9)" />
           </div>
         )}
 
@@ -709,7 +776,7 @@ export default function BtcQuantilePage() {
               {isRefreshing ? "Refreshing…" : "Refresh to load data"}
             </button>
             <span style={{ fontSize: 11, color: "rgba(180,180,200,0.3)" }}>
-              Fetches BTC-USD history from Yahoo Finance and fits quantile bands (~20s)
+              Fetches BTC-USD history from Yahoo Finance and applies the fixed model (~5s)
             </span>
           </div>
         )}
@@ -806,19 +873,24 @@ export default function BtcQuantilePage() {
             >
               {[
                 {
-                  title: "What the bands show",
+                  title: "What the fan shows",
                   text:
-                    "Bitcoin's price has historically oscillated between two power-law boundaries in log-log space. The lower band (q=0.10) describes where price has repeatedly found structural support — a near-straight power law since 2014. The upper band (q=0.90) describes where speculative peaks have occurred — but with a quadratic term that causes it to bend inward over time.",
+                    "Seven quantiles (1, 10, 25, 50, 75, 95, 99%) of Bitcoin's price as fixed-coefficient curves in log-log space: log₁₀(price) = c + a·x + b·x², where x = ln(days since Jan 1 2009) − 7.9914. The coefficients come from Table 3 of the paper and are not re-estimated — the same curves render every time. Per date, the seven values are sorted ascending (rearrangement) to guarantee they never cross.",
                 },
                 {
                   title: "The asymmetry",
                   text:
-                    "Each cycle peak has reached a smaller fraction of the upper band than the previous one — diminishing speculative returns. The quadratic curvature in the upper tail captures this as a single parameter. The lower tail carries no statistically significant curvature. The difference is the formal counterpart to the diminishing-returns pattern.",
+                    "The upper quantiles carry a strong negative curvature (b ≈ −0.33) so they bend inward over time, while the lower quantiles are almost straight (b ≈ −0.02). That gap is the asymmetric tail curvature: speculative peaks reach a smaller multiple of trend each cycle, but the downside floor holds a near-constant power law. The cycle-peak table shows each top reaching a smaller fraction of Q99%.",
+                },
+                {
+                  title: "Dislocation zone",
+                  text:
+                    "The four gold dashed lines sit 7.4%, 17.4%, 22.6%, and 34.6% below the Q1% quantile. The shaded golden band between the top and bottom lines marks the historical 'deep dislocation' region — where price has only briefly traded during capitulations. It is descriptive, not a buy signal.",
                 },
                 {
                   title: "What it is not",
                   text:
-                    "The upper band is not a price target, ceiling, or 'fair value.' The lower band is not a guaranteed floor. The percentile position measures where price sits within its historical distribution — not the probability of future gains or losses. These are distributional summaries, not forecasts.",
+                    "The quantiles are not price targets, ceilings, or 'fair value,' and Q1% is not a guaranteed floor. The percentile readout shows where price sits within this fixed distribution today — not the probability of future gains or losses. The 2-year projection simply extends the deterministic curves; it is not a forecast.",
                 },
                 {
                   title: "Data & model",

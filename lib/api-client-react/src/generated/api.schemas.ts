@@ -481,19 +481,35 @@ export interface GliPayload {
 }
 
 /**
- * One time point in the BTC quantile band series. price is null for projection points beyond the last historical observation.
+ * One time point in the BTC quantile band series. price is null for projection points beyond the last historical observation. The seven q* values are deterministic Table 3 quantiles, rearranged (sorted ascending) per date.
  */
 export interface BtcQuantilePoint {
   /** Unix seconds (Friday weekly grid) */
   time: number;
   /** Actual BTC-USD close price; null for projection points */
   price: number | null;
-  /** q=0.10 band price (linear power law) */
-  lower: number;
-  /** q=0.50 band price (linear power law) */
-  median: number;
-  /** q=0.90 band price (quadratic — compresses inward over time) */
-  upper: number;
+  /** 1% quantile price (10^(c+a·x+b·x²)), rearranged */
+  q01: number;
+  /** 10% quantile price, rearranged */
+  q10: number;
+  /** 25% quantile price, rearranged */
+  q25: number;
+  /** 50% (median) quantile price, rearranged */
+  q50: number;
+  /** 75% quantile price, rearranged */
+  q75: number;
+  /** 95% quantile price, rearranged */
+  q95: number;
+  /** 99% quantile price, rearranged */
+  q99: number;
+  /** Dislocation line 1, q01 × (1 − 0.0735) */
+  disl1: number;
+  /** Dislocation line 2, q01 × (1 − 0.174) */
+  disl2: number;
+  /** Dislocation line 3, q01 × (1 − 0.226) */
+  disl3: number;
+  /** Dislocation line 4, q01 × (1 − 0.346) */
+  disl4: number;
 }
 
 /**
@@ -504,12 +520,12 @@ export interface BtcCyclePeak {
   time: number;
   /** Actual BTC price at the peak */
   price: number;
-  /** Human-readable label e.g. "2021 Peak" */
+  /** Human-readable label e.g. "2021" */
   label: string;
-  /** Upper band (q=0.90) value at the time of the peak */
-  upperBand: number;
-  /** price / upperBand — fraction of the upper band the peak reached (diminishing across cycles) */
-  pctOfUpper: number;
+  /** Q99% band value at the time of the peak */
+  q99: number;
+  /** price / q99 — fraction of the top quantile the peak reached (diminishing across cycles) */
+  pctOfQ99: number;
 }
 
 export interface BtcQuantilePayload {
@@ -519,20 +535,22 @@ export interface BtcQuantilePayload {
   cyclePeaks: BtcCyclePeak[];
   /** Latest BTC-USD weekly close */
   currentPrice: number | null;
-  /** q=0.10 band at the latest data point */
-  currentLower: number | null;
-  /** q=0.50 band at the latest data point */
-  currentMedian: number | null;
-  /** q=0.90 band at the latest data point */
-  currentUpper: number | null;
-  /** Current price position between lower and upper band, 0-100 */
+  /** 1% quantile at the latest data point */
+  currentQ01: number | null;
+  /** 10% quantile at the latest data point */
+  currentQ10: number | null;
+  /** 50% (median) quantile at the latest data point */
+  currentQ50: number | null;
+  /** 95% quantile at the latest data point */
+  currentQ95: number | null;
+  /** 99% quantile at the latest data point */
+  currentQ99: number | null;
+  /** Interpolated percentile of current price across the 7 taus, 0-100 */
   currentPercentile: number | null;
-  /** Linear quantile regression coefficients [intercept, slope] in log-log space for q=0.10 */
-  lowerCoeffs: number[];
-  /** Linear quantile regression coefficients [intercept, slope] in log-log space for q=0.50 */
-  medianCoeffs: number[];
-  /** Quadratic quantile regression coefficients [intercept, slope, curvature] in log-log space for q=0.90 */
-  upperCoeffs: number[];
+  /** Golden zone upper bound (disl1) at the latest data point */
+  goldenTop: number | null;
+  /** Golden zone lower bound (disl4) at the latest data point */
+  goldenBottom: number | null;
   /** Plain-English description of the model, its assumptions, and its limits */
   modelNote: string;
   /** Unix seconds when this data was last refreshed */

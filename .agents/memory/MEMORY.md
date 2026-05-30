@@ -1,0 +1,1 @@
+- [BTC Quantile page model](btc-quantile-model.md) — `/btc-quantile` is a DETERMINISTIC fixed-coefficient paper model (Table 3), not a runtime regression; exact transform + verification anchors inside.

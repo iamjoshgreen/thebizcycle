@@ -15,20 +15,22 @@ export interface BtcQuantilePayload {
   cyclePeaks: BtcCyclePeak[];
   /** Latest BTC-USD weekly close */
   currentPrice: number | null;
-  /** q=0.10 band at the latest data point */
-  currentLower: number | null;
-  /** q=0.50 band at the latest data point */
-  currentMedian: number | null;
-  /** q=0.90 band at the latest data point */
-  currentUpper: number | null;
-  /** Current price position between lower and upper band, 0-100 */
+  /** 1% quantile at the latest data point */
+  currentQ01: number | null;
+  /** 10% quantile at the latest data point */
+  currentQ10: number | null;
+  /** 50% (median) quantile at the latest data point */
+  currentQ50: number | null;
+  /** 95% quantile at the latest data point */
+  currentQ95: number | null;
+  /** 99% quantile at the latest data point */
+  currentQ99: number | null;
+  /** Interpolated percentile of current price across the 7 taus, 0-100 */
   currentPercentile: number | null;
-  /** Linear quantile regression coefficients [intercept, slope] in log-log space for q=0.10 */
-  lowerCoeffs: number[];
-  /** Linear quantile regression coefficients [intercept, slope] in log-log space for q=0.50 */
-  medianCoeffs: number[];
-  /** Quadratic quantile regression coefficients [intercept, slope, curvature] in log-log space for q=0.90 */
-  upperCoeffs: number[];
+  /** Golden zone upper bound (disl1) at the latest data point */
+  goldenTop: number | null;
+  /** Golden zone lower bound (disl4) at the latest data point */
+  goldenBottom: number | null;
   /** Plain-English description of the model, its assumptions, and its limits */
   modelNote: string;
   /** Unix seconds when this data was last refreshed */

@@ -7,17 +7,33 @@
  */
 
 /**
- * One time point in the BTC quantile band series. price is null for projection points beyond the last historical observation.
+ * One time point in the BTC quantile band series. price is null for projection points beyond the last historical observation. The seven q* values are deterministic Table 3 quantiles, rearranged (sorted ascending) per date.
  */
 export interface BtcQuantilePoint {
   /** Unix seconds (Friday weekly grid) */
   time: number;
   /** Actual BTC-USD close price; null for projection points */
   price: number | null;
-  /** q=0.10 band price (linear power law) */
-  lower: number;
-  /** q=0.50 band price (linear power law) */
-  median: number;
-  /** q=0.90 band price (quadratic — compresses inward over time) */
-  upper: number;
+  /** 1% quantile price (10^(c+a·x+b·x²)), rearranged */
+  q01: number;
+  /** 10% quantile price, rearranged */
+  q10: number;
+  /** 25% quantile price, rearranged */
+  q25: number;
+  /** 50% (median) quantile price, rearranged */
+  q50: number;
+  /** 75% quantile price, rearranged */
+  q75: number;
+  /** 95% quantile price, rearranged */
+  q95: number;
+  /** 99% quantile price, rearranged */
+  q99: number;
+  /** Dislocation line 1, q01 × (1 − 0.0735) */
+  disl1: number;
+  /** Dislocation line 2, q01 × (1 − 0.174) */
+  disl2: number;
+  /** Dislocation line 3, q01 × (1 − 0.226) */
+  disl3: number;
+  /** Dislocation line 4, q01 × (1 − 0.346) */
+  disl4: number;
 }
