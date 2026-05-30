@@ -55,15 +55,38 @@ function ordinal(n: number): string {
   return r + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const GENESIS_S = Math.floor(new Date("2009-01-03T00:00:00Z").getTime() / 1000);
+const DAY_S = 86400;
+
+function toLogDays(unixSec: number): number {
+  return Math.log(Math.max(1, (unixSec - GENESIS_S) / DAY_S));
+}
+
 // ─── Chart ────────────────────────────────────────────────────────────────────
+//
+// Recharts ComposedChart in true log-log space:
+//   X-axis = log(days since genesis)  →  XAxis type="number" (linear over pre-transformed values)
+//   Y-axis = log(price)               →  YAxis scale="log" (Recharts handles the log transform)
+//
+// Both axes are logarithmic; the bands appear as straight/curved lines in log-log space
+// exactly as the quantile regression models them.
+//
+// Two-zone band fill achieved by layering four Area components in order:
+//   1. upperFill  → red tint fills from chart bottom up to the upper band
+//   2. medFillA   → background color erases from chart bottom up to median
+//   3. medFillB   → green tint fills from chart bottom up to median
+//   4. lowerFill  → background color erases from chart bottom up to lower
+//
+// Net effect: red region between median and upper, green region between lower and median.
 
 interface ChartProps {
   series: BtcQuantilePoint[];
   cyclePeaks: BtcCyclePeak[];
 }
 
-// Price level tick marks shown on the log Y-axis
-const Y_TICKS = [50, 100, 300, 1_000, 3_000, 10_000, 30_000, 100_000, 300_000, 1_000_000];
+const Y_TICKS = [1, 5, 10, 50, 100, 300, 1_000, 3_000, 10_000, 30_000, 100_000, 300_000, 1_000_000];
 
 function fmtYTick(v: number): string {
   if (v >= 1_000_000) return `$${v / 1_000_000}M`;
@@ -71,21 +94,14 @@ function fmtYTick(v: number): string {
   return `$${v}`;
 }
 
-// ─── Recharts ComposedChart with log Y-axis ───────────────────────────────────
-//
-// X-axis: calendar time (unix seconds, linear).
-// Y-axis: BTC price, log scale — Recharts handles the log transform natively.
-// Bands (upper q=0.90, median q=0.50, lower q=0.10) plotted as dashed Lines.
-// Fill between lower and upper achieved by layering two Areas with different fills.
-// Area keys are aliased (upperFill / lowerFill) so the same dataKey is not shared
-// between an Area and a Line, which would cause Recharts to render only one.
-
 type ChartDatum = {
-  time: number;
-  price: number | undefined;
+  ld: number;       // log(days since genesis) — the X coordinate
+  price?: number;
   upper: number;
   upperFill: number;
   median: number;
+  medFillA: number;
+  medFillB: number;
   lower: number;
   lowerFill: number;
 };
@@ -113,20 +129,26 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
     );
   }
 
-  const chartData: ChartDatum[] = series.map((p) => ({
-    time: p.time,
-    price: p.price ?? undefined,
-    upper: p.upper,
-    upperFill: p.upper,
-    median: p.median,
-    lower: p.lower,
-    lowerFill: p.lower,
-  }));
+  const chartData: ChartDatum[] = series.map((p) => {
+    const ld = toLogDays(p.time);
+    return {
+      ld,
+      price: p.price ?? undefined,
+      upper: p.upper,
+      upperFill: p.upper,
+      median: p.median,
+      medFillA: p.median,
+      medFillB: p.median,
+      lower: p.lower,
+      lowerFill: p.lower,
+    };
+  });
 
   const histSeries = series.filter((p) => p.price != null);
-  const lastHistTime = histSeries[histSeries.length - 1]?.time ?? nowSec;
+  const lastHistLd = toLogDays(histSeries[histSeries.length - 1]?.time ?? nowSec);
+  const nowLd = toLogDays(nowSec);
 
-  // Y domain with padding above and below
+  // Y domain
   const allVals = series.flatMap((p) => [
     p.lower,
     p.upper,
@@ -136,59 +158,42 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
   const yMax = Math.max(...allVals) * 1.5;
   const yTicks = Y_TICKS.filter((t) => t >= yMin * 0.9 && t <= yMax * 1.1);
 
-  // X domain and year-boundary ticks
-  const xMin = series[0].time;
-  const xMax = series[series.length - 1].time;
-  const startYear = new Date(xMin * 1000).getUTCFullYear();
-  const endYear = new Date(xMax * 1000).getUTCFullYear();
-  const yearStep = endYear - startYear > 10 ? 2 : 1;
+  // X domain (logDays) — spans from first series point (near genesis) to end of projection
+  const xMin = chartData[0].ld;
+  const xMax = chartData[chartData.length - 1].ld;
+
+  // Year-boundary ticks: compute logDays for Jan 1 of each year
+  const startYear = new Date(series[0].time * 1000).getUTCFullYear();
+  const endYear = new Date(series[series.length - 1].time * 1000).getUTCFullYear();
+  const yearStep = endYear - startYear > 14 ? 2 : 1;
   const yearTicks: number[] = [];
   for (let y = Math.ceil(startYear / yearStep) * yearStep; y <= endYear; y += yearStep) {
-    yearTicks.push(Math.floor(new Date(`${y}-01-01T00:00:00Z`).getTime() / 1000));
+    const t = Math.floor(new Date(`${y}-01-01T00:00:00Z`).getTime() / 1000);
+    const ld = toLogDays(t);
+    if (ld >= xMin && ld <= xMax) yearTicks.push(ld);
   }
 
-  // Only annotate cycle peaks that fall within the chart's x-range
-  const visiblePeaks = cyclePeaks.filter((p) => p.time >= xMin && p.time <= xMax);
+  // Cycle peaks: all are now within the extended domain (series starts from genesis)
+  const peakAnnotations = cyclePeaks.map((p) => ({
+    ...p,
+    ld: toLogDays(p.time),
+  }));
 
   return (
     <div>
       {/* Legend */}
-      <div
-        style={{
-          display: "flex",
-          gap: 20,
-          padding: "0 0 10px 76px",
-          flexWrap: "wrap",
-        }}
-      >
+      <div style={{ display: "flex", gap: 20, padding: "0 0 10px 76px", flexWrap: "wrap" }}>
         {[
           { label: "q=0.90 (upper)", color: "rgba(239,100,100,0.8)", dash: "5 4" },
           { label: "q=0.50 (median)", color: "rgba(180,180,200,0.5)", dash: "3 4" },
           { label: "q=0.10 (lower)", color: "rgba(52,211,153,0.8)", dash: "5 4" },
           { label: "BTC price", color: "rgba(247,147,26,0.9)", dash: "" },
         ].map((item) => (
-          <div
-            key={item.label}
-            style={{ display: "flex", alignItems: "center", gap: 6 }}
-          >
+          <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <svg width="20" height="10">
-              <line
-                x1={0}
-                y1={5}
-                x2={20}
-                y2={5}
-                stroke={item.color}
-                strokeWidth={item.dash ? 1.2 : 1.6}
-                strokeDasharray={item.dash || undefined}
-              />
+              <line x1={0} y1={5} x2={20} y2={5} stroke={item.color} strokeWidth={item.dash ? 1.2 : 1.6} strokeDasharray={item.dash || undefined} />
             </svg>
-            <span
-              style={{
-                fontSize: 9,
-                fontFamily: mono,
-                color: "rgba(180,180,200,0.6)",
-              }}
-            >
+            <span style={{ fontSize: 9, fontFamily: mono, color: "rgba(180,180,200,0.6)" }}>
               {item.label}
             </span>
           </div>
@@ -196,22 +201,25 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
       </div>
 
       <ResponsiveContainer width="100%" height={500}>
-        <ComposedChart
-          data={chartData}
-          margin={{ top: 10, right: 20, bottom: 28, left: 8 }}
-        >
+        <ComposedChart data={chartData} margin={{ top: 10, right: 20, bottom: 28, left: 8 }}>
+          {/* X-axis: log(days since genesis) — linear over pre-transformed values = log scale */}
           <XAxis
-            dataKey="time"
+            dataKey="ld"
             type="number"
             domain={[xMin, xMax]}
             ticks={yearTicks}
-            tickFormatter={(t: number) =>
-              String(new Date(t * 1000).getUTCFullYear())
-            }
+            tickFormatter={(ld: number) => {
+              // Reverse-map logDays → approximate year for label
+              const days = Math.exp(ld);
+              const t = GENESIS_S + days * DAY_S;
+              return String(new Date(t * 1000).getUTCFullYear());
+            }}
             tick={{ fontSize: 10, fontFamily: mono, fill: "rgba(180,180,200,0.5)" }}
             axisLine={false}
             tickLine={false}
           />
+
+          {/* Y-axis: log scale price */}
           <YAxis
             scale="log"
             domain={[yMin, yMax]}
@@ -224,113 +232,42 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
             allowDataOverflow
           />
 
-          {/* Projection zone */}
-          <ReferenceArea
-            x1={lastHistTime}
-            x2={xMax}
-            fill="rgba(180,180,200,0.025)"
-            stroke="none"
-          />
+          {/* Projection zone: from last real data to end of projection */}
+          <ReferenceArea x1={lastHistLd} x2={xMax} fill="rgba(180,180,200,0.025)" stroke="none" />
 
-          {/* Band fill: layer upperFill (red tint to bottom) then lowerFill (bg to bottom)
-              to produce a net fill only between lower and upper bands. */}
-          <Area
-            type="monotone"
-            dataKey="upperFill"
-            fill="rgba(200,160,80,0.1)"
-            stroke="none"
-            dot={false}
-            isAnimationActive={false}
-            legendType="none"
-          />
-          <Area
-            type="monotone"
-            dataKey="lowerFill"
-            fill={bg}
-            stroke="none"
-            dot={false}
-            isAnimationActive={false}
-            legendType="none"
-          />
+          {/* Two-zone band fill (4 layered Areas):
+              Layer 1: red tint fills up to upper band
+              Layer 2: bg erases up to median (leaves only upper→median in red)
+              Layer 3: green tint fills up to median
+              Layer 4: bg erases up to lower (leaves only median→lower in green) */}
+          <Area type="monotone" dataKey="upperFill" fill="rgba(239,100,100,0.08)" stroke="none" dot={false} isAnimationActive={false} legendType="none" />
+          <Area type="monotone" dataKey="medFillA"  fill={bg}                      stroke="none" dot={false} isAnimationActive={false} legendType="none" />
+          <Area type="monotone" dataKey="medFillB"  fill="rgba(52,211,153,0.06)"  stroke="none" dot={false} isAnimationActive={false} legendType="none" />
+          <Area type="monotone" dataKey="lowerFill" fill={bg}                      stroke="none" dot={false} isAnimationActive={false} legendType="none" />
 
           {/* Quantile band lines */}
-          <Line
-            type="monotone"
-            dataKey="upper"
-            stroke="rgba(239,100,100,0.7)"
-            strokeDasharray="5 4"
-            strokeWidth={1.25}
-            dot={false}
-            isAnimationActive={false}
-            legendType="none"
-          />
-          <Line
-            type="monotone"
-            dataKey="median"
-            stroke="rgba(180,180,200,0.4)"
-            strokeDasharray="3 4"
-            strokeWidth={1}
-            dot={false}
-            isAnimationActive={false}
-            legendType="none"
-          />
-          <Line
-            type="monotone"
-            dataKey="lower"
-            stroke="rgba(52,211,153,0.7)"
-            strokeDasharray="5 4"
-            strokeWidth={1.25}
-            dot={false}
-            isAnimationActive={false}
-            legendType="none"
-          />
+          <Line type="monotone" dataKey="upper"  stroke="rgba(239,100,100,0.7)"  strokeDasharray="5 4" strokeWidth={1.25} dot={false} isAnimationActive={false} legendType="none" />
+          <Line type="monotone" dataKey="median" stroke="rgba(180,180,200,0.4)"  strokeDasharray="3 4" strokeWidth={1}    dot={false} isAnimationActive={false} legendType="none" />
+          <Line type="monotone" dataKey="lower"  stroke="rgba(52,211,153,0.7)"   strokeDasharray="5 4" strokeWidth={1.25} dot={false} isAnimationActive={false} legendType="none" />
 
-          {/* BTC price — null gaps naturally break the line in projection zone */}
-          <Line
-            type="monotone"
-            dataKey="price"
-            stroke="rgba(247,147,26,0.9)"
-            strokeWidth={1.6}
-            dot={false}
-            isAnimationActive={false}
-            connectNulls={false}
-            legendType="none"
-          />
+          {/* BTC price (null values leave a natural gap in the projection zone) */}
+          <Line type="monotone" dataKey="price" stroke="rgba(247,147,26,0.9)" strokeWidth={1.6} dot={false} isAnimationActive={false} connectNulls={false} legendType="none" />
 
           {/* Today marker */}
-          {nowSec >= xMin && nowSec <= xMax && (
-            <ReferenceLine
-              x={nowSec}
-              stroke="rgba(220,225,235,0.25)"
-              strokeDasharray="3 3"
-              label={{
-                value: "today",
-                position: "insideTopRight",
-                fontSize: 9,
-                fontFamily: mono,
-                fill: "rgba(220,225,235,0.4)",
-              }}
+          {nowLd >= xMin && nowLd <= xMax && (
+            <ReferenceLine x={nowLd} stroke="rgba(220,225,235,0.25)" strokeDasharray="3 3"
+              label={{ value: "today", position: "insideTopRight", fontSize: 9, fontFamily: mono, fill: "rgba(220,225,235,0.4)" }}
             />
           )}
 
-          {/* Cycle peak vertical lines + labels */}
-          {visiblePeaks.map((peak) => (
-            <ReferenceLine
-              key={peak.label}
-              x={peak.time}
-              stroke="rgba(220,225,235,0.15)"
-              strokeDasharray="2 3"
-              label={{
-                value: `${peak.label}  ${Math.round(peak.pctOfUpper * 100)}%↑`,
-                position: "insideTopLeft",
-                fontSize: 8,
-                fontFamily: mono,
-                fill: "rgba(247,147,26,0.7)",
-              }}
+          {/* Cycle peak markers (all 4 now on-chart since series extends to genesis) */}
+          {peakAnnotations.map((peak) => (
+            <ReferenceLine key={peak.label} x={peak.ld}
+              stroke="rgba(220,225,235,0.15)" strokeDasharray="2 3"
+              label={{ value: `${peak.label} ${Math.round(peak.pctOfUpper * 100)}%↑`, position: "insideTopLeft", fontSize: 8, fontFamily: mono, fill: "rgba(247,147,26,0.7)" }}
             />
           ))}
 
-          {/* Suppress default tooltip */}
           <Tooltip content={() => null} />
         </ComposedChart>
       </ResponsiveContainer>

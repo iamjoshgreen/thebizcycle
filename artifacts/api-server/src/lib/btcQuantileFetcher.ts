@@ -252,15 +252,26 @@ export async function fetchBtcQuantilePayload(): Promise<BtcQuantilePayload> {
 
   // ─── Build series ─────────────────────────────────────────────────────────
 
-  // All historical Fridays already in sorted[], plus project 2 years forward
   const lastTime = times[times.length - 1];
-  const projEndTime = lastTime + 2 * 365 * DAY_S;
-  const projTimes: number[] = [];
-  for (let t = lastTime + WEEK_S; t <= projEndTime; t += WEEK_S) {
-    projTimes.push(t);
+
+  // Pre-data synthetic points (monthly) from genesis to first real data point.
+  // price=null, but band values let the chart render the full quantile envelope
+  // back to 2009 so the 2011 and 2013 cycle-peak annotations are on-chart.
+  const MONTH_S = 30 * DAY_S;
+  const preData: BtcQuantilePoint[] = [];
+  for (let t = GENESIS_S + MONTH_S; t < times[0]; t += MONTH_S) {
+    const ld = Math.log(Math.max(1, (t - GENESIS_S) / DAY_S));
+    preData.push({
+      time: t,
+      price: null,
+      lower: Math.exp(evalModel(lowerCoeffs, ld)),
+      median: Math.exp(evalModel(medianCoeffs, ld)),
+      upper: Math.exp(evalModel(upperCoeffs, ld)),
+    });
   }
 
-  const series: BtcQuantilePoint[] = [];
+  // Historical weekly Fridays (actual Yahoo data)
+  const series: BtcQuantilePoint[] = [...preData];
   for (let i = 0; i < times.length; i++) {
     const t = times[i];
     const ld = logDaysArr[i];
@@ -272,7 +283,10 @@ export async function fetchBtcQuantilePayload(): Promise<BtcQuantilePayload> {
       upper: Math.exp(evalModel(upperCoeffs, ld)),
     });
   }
-  for (const t of projTimes) {
+
+  // 2-year weekly projection beyond last data point
+  const projEndTime = lastTime + 2 * 365 * DAY_S;
+  for (let t = lastTime + WEEK_S; t <= projEndTime; t += WEEK_S) {
     const ld = Math.log(Math.max(1, (t - GENESIS_S) / DAY_S));
     series.push({
       time: t,
