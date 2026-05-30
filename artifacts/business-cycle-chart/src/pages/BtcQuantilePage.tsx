@@ -1,4 +1,3 @@
-import { useRef } from "react";
 import {
   useGetBtcQuantile,
   useRefreshBtcQuantile,
@@ -10,17 +9,19 @@ import type {
   BtcQuantilePoint,
   BtcCyclePeak,
 } from "@workspace/api-client-react";
+import {
+  ComposedChart,
+  Line,
+  Area,
+  XAxis,
+  YAxis,
+  ReferenceLine,
+  ReferenceArea,
+  ResponsiveContainer,
+  Tooltip,
+} from "recharts";
 import TopBar from "@/components/TopBar";
 import { useToast } from "@/hooks/use-toast";
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const GENESIS_S = Math.floor(new Date("2009-01-03T00:00:00Z").getTime() / 1000);
-const DAY_S = 86400;
-
-function logDays(unixSec: number): number {
-  return Math.log(Math.max(1, (unixSec - GENESIS_S) / DAY_S));
-}
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
@@ -56,35 +57,54 @@ function ordinal(n: number): string {
 
 // ─── Chart ────────────────────────────────────────────────────────────────────
 
-const PRICE_LEVELS = [
-  100, 300, 1_000, 3_000, 10_000, 30_000, 100_000, 300_000, 1_000_000,
-];
-
 interface ChartProps {
   series: BtcQuantilePoint[];
   cyclePeaks: BtcCyclePeak[];
-  width?: number;
-  height?: number;
 }
 
-function BtcQuantileChart({ series, cyclePeaks, width = 1180, height = 520 }: ChartProps) {
-  const padL = 72;
-  const padR = 18;
-  const padT = 28;
-  const padB = 36;
-  const innerW = width - padL - padR;
-  const innerH = height - padT - padB;
+// Price level tick marks shown on the log Y-axis
+const Y_TICKS = [50, 100, 300, 1_000, 3_000, 10_000, 30_000, 100_000, 300_000, 1_000_000];
+
+function fmtYTick(v: number): string {
+  if (v >= 1_000_000) return `$${v / 1_000_000}M`;
+  if (v >= 1_000) return `$${v / 1_000}K`;
+  return `$${v}`;
+}
+
+// ─── Recharts ComposedChart with log Y-axis ───────────────────────────────────
+//
+// X-axis: calendar time (unix seconds, linear).
+// Y-axis: BTC price, log scale — Recharts handles the log transform natively.
+// Bands (upper q=0.90, median q=0.50, lower q=0.10) plotted as dashed Lines.
+// Fill between lower and upper achieved by layering two Areas with different fills.
+// Area keys are aliased (upperFill / lowerFill) so the same dataKey is not shared
+// between an Area and a Line, which would cause Recharts to render only one.
+
+type ChartDatum = {
+  time: number;
+  price: number | undefined;
+  upper: number;
+  upperFill: number;
+  median: number;
+  lower: number;
+  lowerFill: number;
+};
+
+function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
+  const mono = "'JetBrains Mono', monospace";
+  const bg = "hsl(230, 14%, 8%)";
+  const nowSec = Math.floor(Date.now() / 1000);
 
   if (series.length < 4) {
     return (
       <div
         style={{
-          height,
+          height: 520,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           color: "rgba(180,180,200,0.35)",
-          fontFamily: "'JetBrains Mono', monospace",
+          fontFamily: mono,
           fontSize: 13,
         }}
       >
@@ -93,305 +113,228 @@ function BtcQuantileChart({ series, cyclePeaks, width = 1180, height = 520 }: Ch
     );
   }
 
-  // ─── Coordinate helpers ──────────────────────────────────────────────────
+  const chartData: ChartDatum[] = series.map((p) => ({
+    time: p.time,
+    price: p.price ?? undefined,
+    upper: p.upper,
+    upperFill: p.upper,
+    median: p.median,
+    lower: p.lower,
+    lowerFill: p.lower,
+  }));
 
-  const allLogX = series.map((p) => logDays(p.time));
-  const lxMin = allLogX[0];
-  const lxMax = allLogX[allLogX.length - 1];
-  const lxSpan = Math.max(0.001, lxMax - lxMin);
+  const histSeries = series.filter((p) => p.price != null);
+  const lastHistTime = histSeries[histSeries.length - 1]?.time ?? nowSec;
 
-  const sx = (unixSec: number) =>
-    padL + ((logDays(unixSec) - lxMin) / lxSpan) * innerW;
-
-  // Y: log price. Collect all band values + actual prices for range.
-  const allLogY: number[] = [];
-  for (const p of series) {
-    allLogY.push(Math.log(p.lower), Math.log(p.median), Math.log(p.upper));
-    if (p.price != null && p.price > 0) allLogY.push(Math.log(p.price));
-  }
-  const lyMin = Math.min(...allLogY) - 0.15;
-  const lyMax = Math.max(...allLogY) + 0.15;
-  const lySpan = Math.max(0.001, lyMax - lyMin);
-
-  const sy = (price: number) =>
-    padT + (1 - (Math.log(price) - lyMin) / lySpan) * innerH;
-
-  // ─── Path builders ────────────────────────────────────────────────────────
-
-  function linePath(pts: Array<[number, number]>): string {
-    return pts
-      .map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`)
-      .join(" ");
-  }
-
-  function bandPath(upper: Array<[number, number]>, lower: Array<[number, number]>): string {
-    if (!upper.length) return "";
-    const fwd = upper.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
-    const rev = lower
-      .slice()
-      .reverse()
-      .map(([x, y]) => `L${x.toFixed(1)},${y.toFixed(1)}`)
-      .join(" ");
-    return `${fwd} ${rev} Z`;
-  }
-
-  const historicalSeries = series.filter((p) => p.price != null);
-  const nowSec = Math.floor(Date.now() / 1000);
-
-  // Band curves — all points (historical + projection)
-  const lowerPts: Array<[number, number]> = series.map((p) => [sx(p.time), sy(p.lower)]);
-  const medianPts: Array<[number, number]> = series.map((p) => [sx(p.time), sy(p.median)]);
-  const upperPts: Array<[number, number]> = series.map((p) => [sx(p.time), sy(p.upper)]);
-
-  // Price line — historical only
-  const pricePts: Array<[number, number]> = historicalSeries.map((p) => [
-    sx(p.time),
-    sy(p.price as number),
+  // Y domain with padding above and below
+  const allVals = series.flatMap((p) => [
+    p.lower,
+    p.upper,
+    ...(p.price != null ? [p.price] : []),
   ]);
+  const yMin = Math.min(...allVals) * 0.65;
+  const yMax = Math.max(...allVals) * 1.5;
+  const yTicks = Y_TICKS.filter((t) => t >= yMin * 0.9 && t <= yMax * 1.1);
 
-  // Area fills
-  const upperAreaPath = bandPath(upperPts, medianPts);
-  const lowerAreaPath = bandPath(medianPts, lowerPts);
-
-  // ─── Year ticks ──────────────────────────────────────────────────────────
-
-  const yearStart = new Date(series[0].time * 1000).getUTCFullYear();
-  const yearEnd = new Date(series[series.length - 1].time * 1000).getUTCFullYear() + 1;
-  const yearStep = yearEnd - yearStart > 12 ? 2 : 1;
+  // X domain and year-boundary ticks
+  const xMin = series[0].time;
+  const xMax = series[series.length - 1].time;
+  const startYear = new Date(xMin * 1000).getUTCFullYear();
+  const endYear = new Date(xMax * 1000).getUTCFullYear();
+  const yearStep = endYear - startYear > 10 ? 2 : 1;
   const yearTicks: number[] = [];
-  for (let y = Math.ceil(yearStart / yearStep) * yearStep; y <= yearEnd; y += yearStep) {
-    yearTicks.push(y);
+  for (let y = Math.ceil(startYear / yearStep) * yearStep; y <= endYear; y += yearStep) {
+    yearTicks.push(Math.floor(new Date(`${y}-01-01T00:00:00Z`).getTime() / 1000));
   }
-  const yearSec = (y: number) =>
-    Math.floor(new Date(`${y}-01-01T00:00:00Z`).getTime() / 1000);
 
-  // ─── Y axis price levels ─────────────────────────────────────────────────
-
-  const visibleLevels = PRICE_LEVELS.filter((p) => {
-    const ly = Math.log(p);
-    return ly >= lyMin && ly <= lyMax;
-  });
-
-  // ─── Today screen X ──────────────────────────────────────────────────────
-
-  const nowX = sx(nowSec);
-  const lastHistX = sx(historicalSeries[historicalSeries.length - 1]?.time ?? nowSec);
+  // Only annotate cycle peaks that fall within the chart's x-range
+  const visiblePeaks = cyclePeaks.filter((p) => p.time >= xMin && p.time <= xMax);
 
   return (
-    <svg
-      width="100%"
-      height={height}
-      viewBox={`0 0 ${width} ${height}`}
-      preserveAspectRatio="none"
-      style={{ display: "block" }}
-      data-testid="btc-quantile-chart"
-    >
-      {/* Projection zone shading */}
-      {lastHistX < width - padR && (
-        <rect
-          x={lastHistX}
-          y={padT}
-          width={width - padR - lastHistX}
-          height={innerH}
-          fill="rgba(180,180,200,0.025)"
-        />
-      )}
-
-      {/* Y axis price grid lines */}
-      {visibleLevels.map((p) => {
-        const yPos = sy(p);
-        const label =
-          p >= 1_000_000
-            ? `$${p / 1_000_000}M`
-            : p >= 1_000
-            ? `$${p / 1_000}K`
-            : `$${p}`;
-        return (
-          <g key={p}>
-            <line
-              x1={padL}
-              x2={width - padR}
-              y1={yPos}
-              y2={yPos}
-              stroke="rgba(247,147,26,0.06)"
-              strokeWidth={0.6}
-              strokeDasharray="3 5"
-            />
-            <text
-              x={padL - 7}
-              y={yPos + 3.5}
-              textAnchor="end"
-              fontSize={10}
-              fontFamily="'JetBrains Mono', monospace"
-              fill="rgba(247,147,26,0.6)"
-            >
-              {label}
-            </text>
-          </g>
-        );
-      })}
-
-      {/* X axis year ticks */}
-      {yearTicks.map((yr) => {
-        const xPos = sx(yearSec(yr));
-        if (xPos < padL || xPos > width - padR) return null;
-        return (
-          <g key={yr}>
-            <line
-              x1={xPos}
-              x2={xPos}
-              y1={padT}
-              y2={padT + innerH}
-              stroke="rgba(180,180,200,0.05)"
-              strokeWidth={0.6}
-            />
-            <text
-              x={xPos}
-              y={height - 10}
-              textAnchor="middle"
-              fontSize={10}
-              fontFamily="'JetBrains Mono', monospace"
-              fill="rgba(180,180,200,0.5)"
-            >
-              {yr}
-            </text>
-          </g>
-        );
-      })}
-
-      {/* Shaded areas between bands */}
-      <path d={upperAreaPath} fill="rgba(239,100,100,0.08)" />
-      <path d={lowerAreaPath} fill="rgba(52,211,153,0.06)" />
-
-      {/* Band curves */}
-      <path
-        d={linePath(upperPts)}
-        fill="none"
-        stroke="rgba(239,100,100,0.65)"
-        strokeWidth={1.25}
-        strokeDasharray="5 4"
-      />
-      <path
-        d={linePath(medianPts)}
-        fill="none"
-        stroke="rgba(180,180,200,0.4)"
-        strokeWidth={1}
-        strokeDasharray="3 4"
-      />
-      <path
-        d={linePath(lowerPts)}
-        fill="none"
-        stroke="rgba(52,211,153,0.65)"
-        strokeWidth={1.25}
-        strokeDasharray="5 4"
-      />
-
-      {/* BTC price line */}
-      <path
-        d={linePath(pricePts)}
-        fill="none"
-        stroke="rgba(247,147,26,0.9)"
-        strokeWidth={1.6}
-      />
-
-      {/* "Today" marker */}
-      {nowX > padL && nowX < width - padR && (
-        <g>
-          <line
-            x1={nowX}
-            x2={nowX}
-            y1={padT}
-            y2={padT + innerH}
-            stroke="rgba(220,225,235,0.2)"
-            strokeWidth={0.75}
-            strokeDasharray="3 3"
-          />
-          <text
-            x={nowX + 4}
-            y={padT + 12}
-            fontSize={9}
-            fontFamily="'JetBrains Mono', monospace"
-            fill="rgba(220,225,235,0.35)"
-          >
-            today
-          </text>
-        </g>
-      )}
-
-      {/* Cycle peak markers */}
-      {cyclePeaks.map((peak) => {
-        const xPos = sx(peak.time);
-        if (xPos < padL || xPos > width - padR) return null;
-        const yPeakPrice = sy(peak.price);
-        return (
-          <g key={peak.label}>
-            <line
-              x1={xPos}
-              x2={xPos}
-              y1={padT}
-              y2={padT + innerH}
-              stroke="rgba(220,225,235,0.15)"
-              strokeWidth={0.75}
-              strokeDasharray="2 3"
-            />
-            {/* Diamond at peak price */}
-            <polygon
-              points={`${xPos},${yPeakPrice - 5} ${xPos + 4},${yPeakPrice} ${xPos},${yPeakPrice + 5} ${xPos - 4},${yPeakPrice}`}
-              fill="rgba(247,147,26,0.8)"
-            />
-            <text
-              x={xPos + 6}
-              y={yPeakPrice - 8}
-              fontSize={9}
-              fontFamily="'JetBrains Mono', monospace"
-              fill="rgba(247,147,26,0.75)"
-            >
-              {peak.label}
-            </text>
-            <text
-              x={xPos + 6}
-              y={yPeakPrice + 4}
-              fontSize={8.5}
-              fontFamily="'JetBrains Mono', monospace"
-              fill="rgba(180,180,200,0.5)"
-            >
-              {(peak.pctOfUpper * 100).toFixed(0)}% of upper
-            </text>
-          </g>
-        );
-      })}
-
+    <div>
       {/* Legend */}
-      <g>
+      <div
+        style={{
+          display: "flex",
+          gap: 20,
+          padding: "0 0 10px 76px",
+          flexWrap: "wrap",
+        }}
+      >
         {[
           { label: "q=0.90 (upper)", color: "rgba(239,100,100,0.8)", dash: "5 4" },
           { label: "q=0.50 (median)", color: "rgba(180,180,200,0.5)", dash: "3 4" },
           { label: "q=0.10 (lower)", color: "rgba(52,211,153,0.8)", dash: "5 4" },
           { label: "BTC price", color: "rgba(247,147,26,0.9)", dash: "" },
-        ].map((item, i) => (
-          <g key={item.label} transform={`translate(${padL + 12 + i * 148}, ${padT + 10})`}>
-            <line
-              x1={0}
-              x2={18}
-              y1={5}
-              y2={5}
-              stroke={item.color}
-              strokeWidth={item.dash ? 1.2 : 1.6}
-              strokeDasharray={item.dash || undefined}
-            />
-            <text
-              x={22}
-              y={8.5}
-              fontSize={9}
-              fontFamily="'JetBrains Mono', monospace"
-              fill="rgba(180,180,200,0.6)"
+        ].map((item) => (
+          <div
+            key={item.label}
+            style={{ display: "flex", alignItems: "center", gap: 6 }}
+          >
+            <svg width="20" height="10">
+              <line
+                x1={0}
+                y1={5}
+                x2={20}
+                y2={5}
+                stroke={item.color}
+                strokeWidth={item.dash ? 1.2 : 1.6}
+                strokeDasharray={item.dash || undefined}
+              />
+            </svg>
+            <span
+              style={{
+                fontSize: 9,
+                fontFamily: mono,
+                color: "rgba(180,180,200,0.6)",
+              }}
             >
               {item.label}
-            </text>
-          </g>
+            </span>
+          </div>
         ))}
-      </g>
-    </svg>
+      </div>
+
+      <ResponsiveContainer width="100%" height={500}>
+        <ComposedChart
+          data={chartData}
+          margin={{ top: 10, right: 20, bottom: 28, left: 8 }}
+        >
+          <XAxis
+            dataKey="time"
+            type="number"
+            domain={[xMin, xMax]}
+            ticks={yearTicks}
+            tickFormatter={(t: number) =>
+              String(new Date(t * 1000).getUTCFullYear())
+            }
+            tick={{ fontSize: 10, fontFamily: mono, fill: "rgba(180,180,200,0.5)" }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <YAxis
+            scale="log"
+            domain={[yMin, yMax]}
+            ticks={yTicks}
+            tickFormatter={fmtYTick}
+            tick={{ fontSize: 10, fontFamily: mono, fill: "rgba(247,147,26,0.6)" }}
+            axisLine={false}
+            tickLine={false}
+            width={68}
+            allowDataOverflow
+          />
+
+          {/* Projection zone */}
+          <ReferenceArea
+            x1={lastHistTime}
+            x2={xMax}
+            fill="rgba(180,180,200,0.025)"
+            stroke="none"
+          />
+
+          {/* Band fill: layer upperFill (red tint to bottom) then lowerFill (bg to bottom)
+              to produce a net fill only between lower and upper bands. */}
+          <Area
+            type="monotone"
+            dataKey="upperFill"
+            fill="rgba(200,160,80,0.1)"
+            stroke="none"
+            dot={false}
+            isAnimationActive={false}
+            legendType="none"
+          />
+          <Area
+            type="monotone"
+            dataKey="lowerFill"
+            fill={bg}
+            stroke="none"
+            dot={false}
+            isAnimationActive={false}
+            legendType="none"
+          />
+
+          {/* Quantile band lines */}
+          <Line
+            type="monotone"
+            dataKey="upper"
+            stroke="rgba(239,100,100,0.7)"
+            strokeDasharray="5 4"
+            strokeWidth={1.25}
+            dot={false}
+            isAnimationActive={false}
+            legendType="none"
+          />
+          <Line
+            type="monotone"
+            dataKey="median"
+            stroke="rgba(180,180,200,0.4)"
+            strokeDasharray="3 4"
+            strokeWidth={1}
+            dot={false}
+            isAnimationActive={false}
+            legendType="none"
+          />
+          <Line
+            type="monotone"
+            dataKey="lower"
+            stroke="rgba(52,211,153,0.7)"
+            strokeDasharray="5 4"
+            strokeWidth={1.25}
+            dot={false}
+            isAnimationActive={false}
+            legendType="none"
+          />
+
+          {/* BTC price — null gaps naturally break the line in projection zone */}
+          <Line
+            type="monotone"
+            dataKey="price"
+            stroke="rgba(247,147,26,0.9)"
+            strokeWidth={1.6}
+            dot={false}
+            isAnimationActive={false}
+            connectNulls={false}
+            legendType="none"
+          />
+
+          {/* Today marker */}
+          {nowSec >= xMin && nowSec <= xMax && (
+            <ReferenceLine
+              x={nowSec}
+              stroke="rgba(220,225,235,0.25)"
+              strokeDasharray="3 3"
+              label={{
+                value: "today",
+                position: "insideTopRight",
+                fontSize: 9,
+                fontFamily: mono,
+                fill: "rgba(220,225,235,0.4)",
+              }}
+            />
+          )}
+
+          {/* Cycle peak vertical lines + labels */}
+          {visiblePeaks.map((peak) => (
+            <ReferenceLine
+              key={peak.label}
+              x={peak.time}
+              stroke="rgba(220,225,235,0.15)"
+              strokeDasharray="2 3"
+              label={{
+                value: `${peak.label}  ${Math.round(peak.pctOfUpper * 100)}%↑`,
+                position: "insideTopLeft",
+                fontSize: 8,
+                fontFamily: mono,
+                fill: "rgba(247,147,26,0.7)",
+              }}
+            />
+          ))}
+
+          {/* Suppress default tooltip */}
+          <Tooltip content={() => null} />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
   );
 }
 
