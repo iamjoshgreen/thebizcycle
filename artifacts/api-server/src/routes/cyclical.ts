@@ -4,6 +4,7 @@ import {
   type CyclicalPayload,
 } from "../lib/cyclicalFetcher.js";
 import { readIndicator, writeIndicator } from "../lib/indicatorStore.js";
+import { dedupeRefresh } from "../lib/refreshDedup.js";
 
 const router = Router();
 const NAME = "cyclical";
@@ -24,8 +25,11 @@ router.get("/cyclical", async (req, res) => {
 
 router.post("/cyclical/refresh", async (req, res) => {
   try {
-    const payload = await fetchCyclicalPayload();
-    await writeIndicator(NAME, payload);
+    const payload = await dedupeRefresh(NAME, async () => {
+      const p = await fetchCyclicalPayload();
+      await writeIndicator(NAME, p);
+      return p;
+    });
     res.json(payload);
   } catch (err) {
     req.log.error({ err }, "Error refreshing cyclical data");

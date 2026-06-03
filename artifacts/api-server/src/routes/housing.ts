@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { fetchHousingPayload, type HousingPayload } from "../lib/housingFetcher.js";
 import { readIndicator, writeIndicator } from "../lib/indicatorStore.js";
+import { dedupeRefresh } from "../lib/refreshDedup.js";
 
 const router = Router();
 const NAME = "housing";
@@ -21,8 +22,11 @@ router.get("/housing", async (req, res) => {
 
 router.post("/housing/refresh", async (req, res) => {
   try {
-    const payload = await fetchHousingPayload();
-    await writeIndicator(NAME, payload);
+    const payload = await dedupeRefresh(NAME, async () => {
+      const p = await fetchHousingPayload();
+      await writeIndicator(NAME, p);
+      return p;
+    });
     res.json(payload);
   } catch (err) {
     req.log.error({ err }, "Error refreshing housing data");

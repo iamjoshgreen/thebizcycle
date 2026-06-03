@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { fetchAndCompute, type ChartPayload } from "../lib/dataFetcher.js";
 import { readIndicator, writeIndicator } from "../lib/indicatorStore.js";
+import { dedupeRefresh } from "../lib/refreshDedup.js";
 
 const router = Router();
 const NAME = "chart";
@@ -21,8 +22,11 @@ router.get("/chart", async (req, res) => {
 
 router.post("/refresh", async (req, res) => {
   try {
-    const payload = await fetchAndCompute();
-    await writeIndicator(NAME, payload);
+    const payload = await dedupeRefresh(NAME, async () => {
+      const p = await fetchAndCompute();
+      await writeIndicator(NAME, p);
+      return p;
+    });
     res.json(payload);
   } catch (err) {
     req.log.error({ err }, "Error refreshing chart data");

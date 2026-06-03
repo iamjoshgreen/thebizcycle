@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { fetchGliPayload, type GliPayload } from "../lib/gliFetcher.js";
 import { readIndicator, writeIndicator } from "../lib/indicatorStore.js";
+import { dedupeRefresh } from "../lib/refreshDedup.js";
 
 const router = Router();
 const NAME = "gli";
@@ -21,8 +22,11 @@ router.get("/gli", async (req, res) => {
 
 router.post("/gli/refresh", async (req, res) => {
   try {
-    const payload = await fetchGliPayload();
-    await writeIndicator(NAME, payload);
+    const payload = await dedupeRefresh(NAME, async () => {
+      const p = await fetchGliPayload();
+      await writeIndicator(NAME, p);
+      return p;
+    });
     res.json(payload);
   } catch (err) {
     req.log.error({ err }, "Error refreshing gli data");

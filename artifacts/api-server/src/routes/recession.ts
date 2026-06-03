@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { fetchRecessionPayload, type RecessionPayload } from "../lib/recessionFetcher.js";
 import { readIndicator, writeIndicator } from "../lib/indicatorStore.js";
+import { dedupeRefresh } from "../lib/refreshDedup.js";
 
 const router = Router();
 const NAME = "recession";
@@ -21,8 +22,11 @@ router.get("/recession", async (req, res) => {
 
 router.post("/recession/refresh", async (req, res) => {
   try {
-    const payload = await fetchRecessionPayload();
-    await writeIndicator(NAME, payload);
+    const payload = await dedupeRefresh(NAME, async () => {
+      const p = await fetchRecessionPayload();
+      await writeIndicator(NAME, p);
+      return p;
+    });
     res.json(payload);
   } catch (err) {
     req.log.error({ err }, "Error refreshing recession data");

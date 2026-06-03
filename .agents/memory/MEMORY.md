@@ -1,1 +1,2 @@
 - [BTC Quantile page model](btc-quantile-model.md) — `/btc-quantile` is a DETERMINISTIC fixed-coefficient paper model (Table 3), not a runtime regression; exact transform + verification anchors inside.
+- [FRED rate limiting](fred-rate-limiting.md) — all FRED calls must go through `fetchWithRetry`→shared `fredLimiter`; bypassing it re-triggers the 429 lockout. Tuning + dedup rules inside.

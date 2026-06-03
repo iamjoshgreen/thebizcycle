@@ -4,6 +4,7 @@ import {
   type BtcQuantilePayload,
 } from "../lib/btcQuantileFetcher.js";
 import { readIndicator, writeIndicator } from "../lib/indicatorStore.js";
+import { dedupeRefresh } from "../lib/refreshDedup.js";
 
 const router = Router();
 const NAME = "btc-quantile";
@@ -24,8 +25,11 @@ router.get("/btc-quantile", async (req, res) => {
 
 router.post("/btc-quantile/refresh", async (req, res) => {
   try {
-    const payload = await fetchBtcQuantilePayload();
-    await writeIndicator(NAME, payload);
+    const payload = await dedupeRefresh(NAME, async () => {
+      const p = await fetchBtcQuantilePayload();
+      await writeIndicator(NAME, p);
+      return p;
+    });
     res.json(payload);
   } catch (err) {
     req.log.error({ err }, "Error refreshing btc-quantile data");
