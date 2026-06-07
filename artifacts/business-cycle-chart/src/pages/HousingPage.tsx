@@ -1084,7 +1084,9 @@ function DominoCard({ d, index }: { d: DominoStatus; index: number }) {
         }}
       >
         {d.monthsSincePeak === 0
-          ? "at a new 24-month high · still rising"
+          ? d.roc6m != null
+            ? `at a new 24-month high · ${fmtPct(d.roc6m)} over 6mo`
+            : "at a new 24-month high · still rising"
           : `from peak · ${d.monthsSincePeak ?? "—"} mo ago`}
       </div>
 

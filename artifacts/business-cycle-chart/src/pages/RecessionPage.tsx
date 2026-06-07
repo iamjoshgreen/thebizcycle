@@ -212,14 +212,32 @@ function CjiChart({ history, recessions, width = 1200, height = 320 }: CjiChartP
   const xMax = history[history.length - 1].time;
   const xRange = xMax - xMin || 1;
 
-  // Y: clamp range to [-12, +1] for readability; expand if data goes lower.
+  // Y axis uses a BROKEN (piecewise-linear) scale. The action — the warning
+  // bands at -0.5% / -1.5% and typical readings — lives in the 0 to -6% range,
+  // but genuine recessions go far deeper (2008 hit ~-33%). A single linear
+  // scale crushes the warning zone into an unreadable sliver at the top, which
+  // is exactly why the chart looked "pushed to the top". So we give the
+  // [knee, yMax] band the top `topFrac` of the plot at fine resolution and
+  // compress everything below the knee into the remaining space.
   const yDataMin = Math.min(...history.map((p) => p.value));
-  const yMin = Math.min(-12, Math.floor(yDataMin / 2) * 2);
   const yMax = 1;
-  const yRange = yMax - yMin;
+  const knee = -6; // value where the scale switches from fine to compressed
+  const yMin = Math.min(-16, Math.floor(yDataMin / 2) * 2);
+  const topFrac = 0.55;
+
+  const plotTop = padT;
+  const plotBot = height - padB;
+  const kneePx = plotTop + topFrac * (plotBot - plotTop);
 
   const x = (t: number) => padL + ((t - xMin) / xRange) * (width - padL - padR);
-  const y = (v: number) => padT + ((yMax - v) / yRange) * (height - padT - padB);
+  const y = (v: number) => {
+    if (v >= knee) {
+      // [knee, yMax] -> [kneePx, plotTop] — fine resolution for the warning zone
+      return plotTop + ((yMax - v) / (yMax - knee)) * (kneePx - plotTop);
+    }
+    // [yMin, knee] -> [plotBot, kneePx] — compressed for deep recessions
+    return kneePx + ((knee - v) / (knee - yMin)) * (plotBot - kneePx);
+  };
 
   const linePath = history
     .map((p, i) => `${i === 0 ? "M" : "L"} ${x(p.time).toFixed(2)} ${y(p.value).toFixed(2)}`)
@@ -232,9 +250,10 @@ function CjiChart({ history, recessions, width = 1200, height = 320 }: CjiChartP
     { from: -1.5, to: yMin, color: "rgba(239,68,68,0.10)" },
   ];
 
-  // Y-axis ticks
-  const yTicks: number[] = [];
-  for (let v = 0; v >= yMin; v -= 2) yTicks.push(v);
+  // Y-axis ticks: dense in the fine top zone, sparse in the compressed lower
+  // zone so the warning bands are readable without a wall of labels below.
+  const yTicks: number[] = [0, -2, -4, -6];
+  for (let v = -10; v >= yMin; v -= 10) yTicks.push(v);
 
   // X-axis: decade ticks
   const startYear = new Date(xMin * 1000).getUTCFullYear();
@@ -359,6 +378,17 @@ function CjiChart({ history, recessions, width = 1200, height = 320 }: CjiChartP
         stroke="rgba(239,68,68,0.45)"
         strokeWidth={1}
         strokeDasharray="3 3"
+      />
+
+      {/* Broken-axis marker at the knee — the conventional "//" glyph on the
+          left axis signals that the vertical scale is compressed below this
+          line, so deep recessions aren't read at the same resolution as the
+          shallow warning zone above. */}
+      <path
+        d={`M ${padL - 5} ${kneePx + 4} l 10 -7 M ${padL - 5} ${kneePx + 8} l 10 -7`}
+        stroke="rgba(180,180,200,0.6)"
+        strokeWidth={1}
+        fill="none"
       />
 
       {/* CJI line */}
