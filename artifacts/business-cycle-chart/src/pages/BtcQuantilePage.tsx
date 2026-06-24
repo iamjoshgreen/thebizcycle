@@ -110,6 +110,60 @@ function priceAxisFmt(p: number): string {
 
 const DISL_KEYS = ["disl1", "disl2", "disl3", "disl4"] as const;
 
+const WEEK_SEC = 7 * 86400;
+
+// lightweight-charts spaces points by index, not by real calendar time. The
+// source series is mixed-cadence (monthly 2010–2014, then weekly), so index
+// spacing crams the early years into a thin left strip (a sharp "elbow") and
+// distorts the concave fan. Resampling onto a uniform weekly grid restores the
+// linear-calendar-time look of the original chart: the analytic quantile and
+// dislocation curves are smooth, so linear interpolation between source points
+// is faithful, and the price polyline is sampled along itself (no fabricated
+// price beyond the last real print).
+function resampleWeekly(series: BtcQuantilePoint[]): BtcQuantilePoint[] {
+  const start = series[0].time;
+  const end = series[series.length - 1].time;
+  const grid: number[] = [];
+  for (let t = start; t < end; t += WEEK_SEC) grid.push(t);
+  grid.push(end);
+
+  const lerp = (t: number, t0: number, v0: number, t1: number, v1: number) =>
+    t1 === t0 ? v0 : v0 + (v1 - v0) * ((t - t0) / (t1 - t0));
+
+  const numKeys = [
+    "q01", "q10", "q25", "q50", "q75", "q95", "q99",
+    "disl1", "disl2", "disl3", "disl4",
+  ] as const;
+
+  const pricePts = series.filter(
+    (p) => p.price != null,
+  ) as Array<BtcQuantilePoint & { price: number }>;
+  const firstPriceT = pricePts.length ? pricePts[0].time : Infinity;
+  const lastPriceT = pricePts.length ? pricePts[pricePts.length - 1].time : -Infinity;
+
+  let j = 0;
+  let pj = 0;
+  const out: BtcQuantilePoint[] = [];
+  for (const t of grid) {
+    while (j < series.length - 2 && series[j + 1].time <= t) j++;
+    const a = series[j];
+    const b = series[Math.min(j + 1, series.length - 1)];
+    const obj: Record<string, number | null> = { time: t };
+    for (const k of numKeys) obj[k] = lerp(t, a.time, a[k], b.time, b[k]);
+
+    if (t < firstPriceT || t > lastPriceT) {
+      obj.price = null;
+    } else {
+      while (pj < pricePts.length - 2 && pricePts[pj + 1].time <= t) pj++;
+      const pa = pricePts[pj];
+      const pb = pricePts[Math.min(pj + 1, pricePts.length - 1)];
+      obj.price = lerp(t, pa.time, pa.price, pb.time, pb.price);
+    }
+    out.push(obj as unknown as BtcQuantilePoint);
+  }
+  return out;
+}
+
 // ── Pane primitive: golden dislocation band (fills disl1 top → disl4 bottom) ──
 
 type BandPoint = { time: number; top: number; bottom: number };
@@ -313,7 +367,7 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
       rightPriceScale: {
         borderColor: "hsl(230 10% 16%)",
         mode: 1, // log
-        scaleMargins: { top: 0.12, bottom: 0.08 },
+        scaleMargins: { top: 0.06, bottom: 0.04 },
       },
       leftPriceScale: { visible: false },
       handleScale: true,
@@ -406,22 +460,26 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
     const chart = chartRef.current;
     if (!chart || series.length < 2) return;
 
+    // Resample to a uniform weekly grid so lightweight-charts' index-based
+    // spacing reproduces the original linear-calendar-time look.
+    const resampled = resampleWeekly(series);
+
     const map = new Map<number, BtcQuantilePoint>();
-    for (const p of series) map.set(p.time, p);
+    for (const p of resampled) map.set(p.time, p);
     dataMapRef.current = map;
 
     for (const q of QLINES) {
       const s = qSeriesRef.current.get(q.key as string);
       s?.setData(
-        series.map((p) => ({ time: p.time as UTCTimestamp, value: p[q.key] as number })),
+        resampled.map((p) => ({ time: p.time as UTCTimestamp, value: p[q.key] as number })),
       );
     }
     for (const k of DISL_KEYS) {
       const s = dislSeriesRef.current.get(k);
-      s?.setData(series.map((p) => ({ time: p.time as UTCTimestamp, value: p[k] })));
+      s?.setData(resampled.map((p) => ({ time: p.time as UTCTimestamp, value: p[k] })));
     }
     priceSeriesRef.current?.setData(
-      series
+      resampled
         .filter((p) => p.price != null)
         .map((p) => ({ time: p.time as UTCTimestamp, value: p.price as number })),
     );
@@ -439,7 +497,7 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
       const nowSec = Math.floor(Date.now() / 1000);
 
       const band = new BandPrimitive(
-        series.map((p) => ({ time: p.time, top: p.disl1, bottom: p.disl4 })),
+        resampled.map((p) => ({ time: p.time, top: p.disl1, bottom: p.disl4 })),
         anchor,
         chart,
       );
