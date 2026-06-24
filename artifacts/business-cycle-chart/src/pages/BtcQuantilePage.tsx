@@ -11,16 +11,17 @@ import type {
   BtcCyclePeak,
 } from "@workspace/api-client-react";
 import {
-  ComposedChart,
-  Line,
-  Area,
-  XAxis,
-  YAxis,
-  ReferenceLine,
-  ReferenceArea,
-  ResponsiveContainer,
-  Tooltip,
-} from "recharts";
+  createChart,
+  LineSeries,
+  ColorType,
+  LineStyle,
+  type IChartApi,
+  type ISeriesApi,
+  type UTCTimestamp,
+  type IPrimitivePaneRenderer,
+  type IPrimitivePaneView,
+  type MouseEventParams,
+} from "lightweight-charts";
 import TopBar from "@/components/TopBar";
 import { useToast } from "@/hooks/use-toast";
 
@@ -71,34 +72,23 @@ const QLINES: Array<{ key: keyof BtcQuantilePoint; color: string; label: string 
 
 const GOLD = "#d4af37";
 
-// ─── Chart ────────────────────────────────────────────────────────────────────
+// ─── Chart (lightweight-charts) ─────────────────────────────────────────────────
 //
-// Recharts ComposedChart: linear calendar-time X, log-price Y.
-//   X-axis = real time (ms)  →  XAxis type="number" scale="linear" (paper's Figure 1)
-//   Y-axis = log(price)       →  YAxis scale="log" (Recharts handles the log transform)
-// Plotting the ln(t)-driven bands against linear time produces the concave fan: the
-// upper quantiles bend inward over time while the lower quantiles stay near-straight.
+// Rebuilt on lightweight-charts — the TradingView engine the Fractal Overlay and
+// Business Cycle Chart pages use — so the BTC Quantile chart gets the same fluid,
+// native scroll-to-zoom / drag-to-pan and an auto-fitting log price scale (which
+// replaces the old hand-rolled recharts wheel/drag zoom that had no panning).
 //
-// Layers (back → front):
-//   1. golden dislocation zone (Area between disl1 top and disl4 bottom)
-//   2. four dashed dislocation lines below q01
-//   3. seven-quantile fan (q01..q99), no fills between them
-//   4. BTC price line on top
+// The seven-quantile fan, the four dashed dislocation lines, and the BTC price
+// line are line series on a single log price scale against a linear time axis.
+// The non-line visuals — the golden dislocation band, the projection-zone
+// shading, and the today/cycle-peak markers — are drawn as canvas pane
+// primitives (same approach as the recession bars on the Business Cycle chart),
+// so they track the data at every zoom level.
 
 interface ChartProps {
   series: BtcQuantilePoint[];
   cyclePeaks: BtcCyclePeak[];
-}
-
-const Y_TICKS = [
-  0.1, 0.3, 1, 5, 10, 50, 100, 300, 1_000, 3_000, 10_000, 30_000, 100_000, 300_000, 1_000_000,
-];
-
-function fmtYTick(v: number): string {
-  if (v >= 1_000_000) return `$${v / 1_000_000}M`;
-  if (v >= 1_000) return `$${v / 1_000}K`;
-  if (v < 1) return `$${v}`;
-  return `$${v}`;
 }
 
 const MON = [
@@ -106,253 +96,399 @@ const MON = [
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
-const DAY_MS = 86_400_000;
-const MIN_ZOOM_SPAN = 21 * DAY_MS; // don't let the wheel zoom tighter than ~3 weeks
-
-// Adaptive x-axis ticks: the deeper the zoom, the finer the time markers
-// (years → half-years → quarters → months). Returns ticks (ms) + a label fmt.
-function computeXTicks(lo: number, hi: number): {
-  ticks: number[];
-  fmt: (ms: number) => string;
-} {
-  const spanDays = (hi - lo) / DAY_MS;
-  const startY = new Date(lo).getUTCFullYear();
-  const endY = new Date(hi).getUTCFullYear();
-  const ticks: number[] = [];
-  const push = (ms: number) => {
-    if (ms >= lo && ms <= hi) ticks.push(ms);
-  };
-  const yearLabel = (ms: number) => String(new Date(ms).getUTCFullYear());
-  const monthLabel = (ms: number) => {
-    const d = new Date(ms);
-    return d.getUTCMonth() === 0
-      ? String(d.getUTCFullYear())
-      : `${MON[d.getUTCMonth()]} '${String(d.getUTCFullYear()).slice(2)}`;
-  };
-
-  if (spanDays > 365 * 24) {
-    for (let y = startY; y <= endY + 1; y += 2) push(Date.UTC(y, 0, 1));
-    return { ticks, fmt: yearLabel };
-  }
-  if (spanDays > 365 * 2.5) {
-    for (let y = startY; y <= endY + 1; y++) push(Date.UTC(y, 0, 1));
-    return { ticks, fmt: yearLabel };
-  }
-  if (spanDays > 270) {
-    for (let y = startY; y <= endY + 1; y++)
-      for (const m of [0, 3, 6, 9]) push(Date.UTC(y, m, 1));
-    return { ticks, fmt: monthLabel };
-  }
-  // ≤ ~9 months: monthly ticks
-  for (let y = startY; y <= endY + 1; y++)
-    for (let m = 0; m < 12; m++) push(Date.UTC(y, m, 1));
-  return { ticks, fmt: monthLabel };
+function goldRgba(opacity: number): string {
+  return `rgba(212, 175, 55, ${opacity})`;
 }
 
-// Hover tooltip — reads the date + price + key quantiles at the cursor.
-function ChartTooltip({ active, payload, label }: any) {
-  if (!active || !payload || !payload.length || label == null) return null;
+// Right price-axis tick formatter (log price → compact $ label).
+function priceAxisFmt(p: number): string {
+  if (p >= 1_000_000) return `$${(p / 1_000_000).toFixed(1)}M`;
+  if (p >= 1_000) return `$${Math.round(p / 1_000)}K`;
+  if (p >= 1) return `$${Math.round(p)}`;
+  return `$${p.toFixed(2)}`;
+}
+
+const DISL_KEYS = ["disl1", "disl2", "disl3", "disl4"] as const;
+
+// ── Pane primitive: golden dislocation band (fills disl1 top → disl4 bottom) ──
+
+type BandPoint = { time: number; top: number; bottom: number };
+
+class BandRenderer implements IPrimitivePaneRenderer {
+  constructor(
+    private _data: BandPoint[],
+    private _series: ISeriesApi<"Line">,
+    private _chart: IChartApi,
+  ) {}
+  draw(target: Parameters<IPrimitivePaneRenderer["draw"]>[0]): void {
+    if (this._data.length < 2) return;
+    const ts = this._chart.timeScale();
+    const series = this._series;
+    target.useMediaCoordinateSpace(({ context: ctx }) => {
+      const pts: { x: number; yTop: number; yBot: number }[] = [];
+      for (const d of this._data) {
+        const x = ts.timeToCoordinate(d.time as UTCTimestamp);
+        const yTop = series.priceToCoordinate(d.top);
+        const yBot = series.priceToCoordinate(d.bottom);
+        if (x === null || yTop === null || yBot === null) continue;
+        pts.push({ x, yTop, yBot });
+      }
+      if (pts.length < 2) return;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].yTop);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].yTop);
+      for (let i = pts.length - 1; i >= 0; i--) ctx.lineTo(pts[i].x, pts[i].yBot);
+      ctx.closePath();
+      ctx.fillStyle = goldRgba(0.16);
+      ctx.fill();
+      ctx.restore();
+    });
+  }
+}
+
+class BandPaneView implements IPrimitivePaneView {
+  constructor(
+    private _data: BandPoint[],
+    private _series: ISeriesApi<"Line">,
+    private _chart: IChartApi,
+  ) {}
+  zOrder(): "bottom" { return "bottom"; }
+  renderer(): IPrimitivePaneRenderer { return new BandRenderer(this._data, this._series, this._chart); }
+}
+
+class BandPrimitive {
+  constructor(
+    private _data: BandPoint[],
+    private _series: ISeriesApi<"Line">,
+    private _chart: IChartApi,
+  ) {}
+  paneViews() { return [new BandPaneView(this._data, this._series, this._chart)]; }
+  priceAxisViews() { return []; }
+  timeAxisViews() { return []; }
+  priceAxisPaneViews() { return []; }
+  timeAxisPaneViews() { return []; }
+}
+
+// ── Pane primitive: projection-zone shading (from last history → end) ──
+
+class ShadeRenderer implements IPrimitivePaneRenderer {
+  constructor(private _from: number, private _to: number, private _chart: IChartApi) {}
+  draw(target: Parameters<IPrimitivePaneRenderer["draw"]>[0]): void {
+    const ts = this._chart.timeScale();
+    target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
+      const x1 = ts.timeToCoordinate(this._from as UTCTimestamp);
+      const x2 = ts.timeToCoordinate(this._to as UTCTimestamp);
+      if (x1 === null || x2 === null) return;
+      ctx.save();
+      ctx.fillStyle = "rgba(180, 180, 200, 0.025)";
+      ctx.fillRect(Math.min(x1, x2), 0, Math.abs(x2 - x1), mediaSize.height);
+      ctx.restore();
+    });
+  }
+}
+
+class ShadePaneView implements IPrimitivePaneView {
+  constructor(private _from: number, private _to: number, private _chart: IChartApi) {}
+  zOrder(): "bottom" { return "bottom"; }
+  renderer(): IPrimitivePaneRenderer { return new ShadeRenderer(this._from, this._to, this._chart); }
+}
+
+class ShadePrimitive {
+  constructor(private _from: number, private _to: number, private _chart: IChartApi) {}
+  paneViews() { return [new ShadePaneView(this._from, this._to, this._chart)]; }
+  priceAxisViews() { return []; }
+  timeAxisViews() { return []; }
+  priceAxisPaneViews() { return []; }
+  timeAxisPaneViews() { return []; }
+}
+
+// ── Pane primitive: vertical markers (today + cycle peaks) with labels ──
+
+type VLine = {
+  time: number;
+  color: string;
+  label: string;
+  labelColor: string;
+  align: "left" | "right";
+};
+
+class MarkersRenderer implements IPrimitivePaneRenderer {
+  constructor(private _lines: VLine[], private _chart: IChartApi) {}
+  draw(target: Parameters<IPrimitivePaneRenderer["draw"]>[0]): void {
+    if (this._lines.length === 0) return;
+    const ts = this._chart.timeScale();
+    target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
+      ctx.save();
+      ctx.font = "9px 'JetBrains Mono', monospace";
+      ctx.textBaseline = "top";
+      for (const v of this._lines) {
+        const x = ts.timeToCoordinate(v.time as UTCTimestamp);
+        if (x === null) continue;
+        ctx.beginPath();
+        ctx.setLineDash([3, 3]);
+        ctx.strokeStyle = v.color;
+        ctx.lineWidth = 1;
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, mediaSize.height);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = v.labelColor;
+        if (v.align === "right") {
+          ctx.textAlign = "right";
+          ctx.fillText(v.label, x - 4, 4);
+        } else {
+          ctx.textAlign = "left";
+          ctx.fillText(v.label, x + 4, 4);
+        }
+      }
+      ctx.restore();
+    });
+  }
+}
+
+class MarkersPaneView implements IPrimitivePaneView {
+  constructor(private _lines: VLine[], private _chart: IChartApi) {}
+  zOrder(): "top" { return "top"; }
+  renderer(): IPrimitivePaneRenderer { return new MarkersRenderer(this._lines, this._chart); }
+}
+
+class MarkersPrimitive {
+  constructor(private _lines: VLine[], private _chart: IChartApi) {}
+  paneViews() { return [new MarkersPaneView(this._lines, this._chart)]; }
+  priceAxisViews() { return []; }
+  timeAxisViews() { return []; }
+  priceAxisPaneViews() { return []; }
+  timeAxisPaneViews() { return []; }
+}
+
+function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
   const mono = "'JetBrains Mono', monospace";
-  const get = (k: string) => payload.find((p: any) => p.dataKey === k)?.value;
-  const price = get("price");
-  const d = new Date(label);
-  const dateStr = `${MON[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
-  const rows: Array<{ k: string; label: string; color: string }> = [
+  const containerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const disposedRef = useRef(false);
+  const qSeriesRef = useRef<Map<string, ISeriesApi<"Line">>>(new Map());
+  const dislSeriesRef = useRef<Map<string, ISeriesApi<"Line">>>(new Map());
+  const priceSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const anchorSeriesRef = useRef<ISeriesApi<"Line"> | null>(null);
+  const primsRef = useRef<unknown[]>([]);
+  const dataMapRef = useRef<Map<number, BtcQuantilePoint>>(new Map());
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; p: BtcQuantilePoint } | null>(null);
+
+  // Initialize chart + series once. Native handleScale/handleScroll give the same
+  // fluid zoom & pan as the other lightweight-charts pages; the log price scale
+  // auto-fits to the visible data as you zoom/pan.
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    disposedRef.current = false;
+
+    const chart = createChart(container, {
+      width: container.clientWidth || 800,
+      height: container.clientHeight || 600,
+      autoSize: false,
+      layout: {
+        background: { type: ColorType.Solid, color: "hsl(230 12% 9.5%)" },
+        textColor: "rgba(200,200,220,0.55)",
+        fontFamily: "'JetBrains Mono', monospace",
+        fontSize: 11,
+      },
+      grid: {
+        vertLines: { color: "rgba(255,255,255,0.035)" },
+        horzLines: { color: "rgba(255,255,255,0.035)" },
+      },
+      crosshair: {
+        mode: 1,
+        vertLine: { color: "rgba(220,225,235,0.3)", width: 1, style: 2, labelBackgroundColor: "#14141c" },
+        horzLine: { color: "rgba(220,225,235,0.3)", width: 1, style: 2, labelBackgroundColor: "#14141c" },
+      },
+      timeScale: {
+        borderColor: "hsl(230 10% 16%)",
+        timeVisible: false,
+        secondsVisible: false,
+        rightOffset: 4,
+        fixLeftEdge: true,
+        fixRightEdge: true,
+      },
+      rightPriceScale: {
+        borderColor: "hsl(230 10% 16%)",
+        mode: 1, // log
+        scaleMargins: { top: 0.12, bottom: 0.08 },
+      },
+      leftPriceScale: { visible: false },
+      handleScale: true,
+      handleScroll: true,
+      localization: { priceFormatter: priceAxisFmt },
+    });
+    chartRef.current = chart;
+
+    // Dislocation dashed lines (behind everything).
+    for (const k of DISL_KEYS) {
+      const s = chart.addSeries(LineSeries, {
+        color: goldRgba(0.55),
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      dislSeriesRef.current.set(k, s);
+    }
+
+    // Seven-quantile fan.
+    for (const q of QLINES) {
+      const s = chart.addSeries(LineSeries, {
+        color: q.color,
+        lineWidth: 2,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      qSeriesRef.current.set(q.key as string, s);
+    }
+
+    // BTC price (front).
+    const price = chart.addSeries(LineSeries, {
+      color: "rgba(247,147,26,0.95)",
+      lineWidth: 2,
+      priceLineVisible: false,
+      lastValueVisible: true,
+    });
+    priceSeriesRef.current = price;
+    anchorSeriesRef.current = qSeriesRef.current.get("q01") ?? price;
+
+    const ro = new ResizeObserver((entries) => {
+      if (disposedRef.current) return;
+      const entry = entries[0];
+      if (!entry) return;
+      const w = Math.floor(entry.contentRect.width);
+      const h = Math.floor(entry.contentRect.height);
+      if (w <= 0 || h <= 0) return;
+      try {
+        chart.resize(w, h);
+      } catch {
+        /* torn down */
+      }
+    });
+    ro.observe(container);
+
+    const onMove = (param: MouseEventParams) => {
+      if (!param.point || param.time == null) {
+        setTooltip(null);
+        return;
+      }
+      const t = typeof param.time === "number" ? param.time : Number(param.time);
+      const p = dataMapRef.current.get(t);
+      if (!p) {
+        setTooltip(null);
+        return;
+      }
+      setTooltip({ x: param.point.x, y: param.point.y, p });
+    };
+    chart.subscribeCrosshairMove(onMove);
+
+    return () => {
+      disposedRef.current = true;
+      try { ro.disconnect(); } catch { /* ok */ }
+      try { chart.unsubscribeCrosshairMove(onMove); } catch { /* ok */ }
+      try { chart.remove(); } catch { /* ok */ }
+      chartRef.current = null;
+      priceSeriesRef.current = null;
+      anchorSeriesRef.current = null;
+      qSeriesRef.current.clear();
+      dislSeriesRef.current.clear();
+      primsRef.current = [];
+    };
+  }, []);
+
+  // Push data + rebuild primitives whenever the series changes.
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || series.length < 2) return;
+
+    const map = new Map<number, BtcQuantilePoint>();
+    for (const p of series) map.set(p.time, p);
+    dataMapRef.current = map;
+
+    for (const q of QLINES) {
+      const s = qSeriesRef.current.get(q.key as string);
+      s?.setData(
+        series.map((p) => ({ time: p.time as UTCTimestamp, value: p[q.key] as number })),
+      );
+    }
+    for (const k of DISL_KEYS) {
+      const s = dislSeriesRef.current.get(k);
+      s?.setData(series.map((p) => ({ time: p.time as UTCTimestamp, value: p[k] })));
+    }
+    priceSeriesRef.current?.setData(
+      series
+        .filter((p) => p.price != null)
+        .map((p) => ({ time: p.time as UTCTimestamp, value: p.price as number })),
+    );
+
+    const anchor = anchorSeriesRef.current;
+    if (anchor) {
+      for (const prim of primsRef.current) {
+        try { anchor.detachPrimitive(prim as never); } catch { /* ok */ }
+      }
+      primsRef.current = [];
+
+      const hist = series.filter((p) => p.price != null);
+      const lastHist = hist[hist.length - 1]?.time ?? series[series.length - 1].time;
+      const xMax = series[series.length - 1].time;
+      const nowSec = Math.floor(Date.now() / 1000);
+
+      const band = new BandPrimitive(
+        series.map((p) => ({ time: p.time, top: p.disl1, bottom: p.disl4 })),
+        anchor,
+        chart,
+      );
+      const shade = new ShadePrimitive(lastHist, xMax, chart);
+
+      const vlines: VLine[] = [];
+      if (nowSec >= series[0].time && nowSec <= xMax) {
+        vlines.push({
+          time: nowSec,
+          color: "rgba(220,225,235,0.25)",
+          label: "today",
+          labelColor: "rgba(220,225,235,0.4)",
+          align: "right",
+        });
+      }
+      for (const peak of cyclePeaks) {
+        vlines.push({
+          time: peak.time,
+          color: "rgba(220,225,235,0.18)",
+          label: `${peak.label}  ${fmtPrice(peak.price)}`,
+          labelColor: "rgba(247,147,26,0.65)",
+          align: "left",
+        });
+      }
+      const markers = new MarkersPrimitive(vlines, chart);
+
+      anchor.attachPrimitive(shade as never);
+      anchor.attachPrimitive(band as never);
+      anchor.attachPrimitive(markers as never);
+      primsRef.current = [shade, band, markers];
+    }
+
+    try { chart.timeScale().fitContent(); } catch { /* ok */ }
+  }, [series, cyclePeaks]);
+
+  const resetZoom = () => {
+    try { chartRef.current?.timeScale().fitContent(); } catch { /* ok */ }
+  };
+
+  // Tooltip rows (key quantiles), matching the previous content.
+  const tipRows: Array<{ k: keyof BtcQuantilePoint; label: string; color: string }> = [
     { k: "q99", label: "Q99", color: "#a52828" },
     { k: "q95", label: "Q95", color: "#d35f3a" },
     { k: "q50", label: "Q50", color: "#c8b94a" },
     { k: "q10", label: "Q10", color: "#4a9d4f" },
     { k: "q01", label: "Q1", color: "#1a6b2f" },
   ];
-  return (
-    <div
-      style={{
-        background: "rgba(18,20,28,0.96)",
-        border: "1px solid rgba(120,130,160,0.3)",
-        borderRadius: 6,
-        padding: "8px 10px",
-        fontFamily: mono,
-        fontSize: 10,
-        lineHeight: 1.6,
-        color: "rgba(220,225,235,0.85)",
-        boxShadow: "0 4px 18px rgba(0,0,0,0.45)",
-      }}
-    >
-      <div style={{ color: "rgba(180,180,200,0.7)", marginBottom: 4 }}>{dateStr}</div>
-      {price != null && (
-        <div style={{ color: "rgba(247,147,26,0.95)", fontWeight: 600, marginBottom: 4 }}>
-          BTC&nbsp;&nbsp;{fmtPrice(price)}
-        </div>
-      )}
-      {rows.map((r) => {
-        const v = get(r.k);
-        if (v == null) return null;
-        return (
-          <div key={r.k} style={{ display: "flex", justifyContent: "space-between", gap: 14 }}>
-            <span style={{ color: r.color }}>{r.label}</span>
-            <span>{fmtPrice(v)}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-type ChartDatum = {
-  t: number; // milliseconds since epoch — linear calendar-time X coordinate
-  price?: number;
-  q01: number;
-  q10: number;
-  q25: number;
-  q50: number;
-  q75: number;
-  q95: number;
-  q99: number;
-  disl1: number;
-  disl2: number;
-  disl3: number;
-  disl4: number;
-  gold: [number, number]; // [disl4 (bottom), disl1 (top)]
-};
-
-function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
-  const mono = "'JetBrains Mono', monospace";
-  const nowSec = Math.floor(Date.now() / 1000);
-  const [zoom, setZoom] = useState<[number, number] | null>(null);
-  const [refLeft, setRefLeft] = useState<number | null>(null);
-  const [refRight, setRefRight] = useState<number | null>(null);
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const hoverMsRef = useRef<number | null>(null);
-  const zoomRef = useRef<[number, number] | null>(null);
-  const boundsRef = useRef<{ xMin: number; xMax: number }>({ xMin: 0, xMax: 0 });
-  zoomRef.current = zoom;
-
-  // Mouse-wheel zoom, centered on the cursor — the "normal chart" gesture.
-  // Native non-passive listener so we can preventDefault and stop the page from
-  // scrolling while zooming. Bound once; reads live state via refs. Declared
-  // before any early return to keep hook order stable.
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    const onWheel = (ev: WheelEvent) => {
-      ev.preventDefault();
-      const { xMin, xMax } = boundsRef.current;
-      if (!(xMax > xMin)) return;
-      const [curLo, curHi] = zoomRef.current ?? [xMin, xMax];
-      const focusRaw = hoverMsRef.current ?? (curLo + curHi) / 2;
-      const focus = Math.min(Math.max(focusRaw, curLo), curHi);
-      const factor = ev.deltaY < 0 ? 0.8 : 1.25; // up = zoom in, down = zoom out
-      let newLo = focus - (focus - curLo) * factor;
-      let newHi = focus + (curHi - focus) * factor;
-      if (newLo < xMin) newLo = xMin;
-      if (newHi > xMax) newHi = xMax;
-      // Guarantee at least MIN_ZOOM_SPAN, re-centering within bounds if needed.
-      if (newHi - newLo < MIN_ZOOM_SPAN) {
-        if (xMax - xMin <= MIN_ZOOM_SPAN) {
-          newLo = xMin;
-          newHi = xMax;
-        } else {
-          newLo = focus - MIN_ZOOM_SPAN / 2;
-          newHi = focus + MIN_ZOOM_SPAN / 2;
-          if (newLo < xMin) {
-            newLo = xMin;
-            newHi = xMin + MIN_ZOOM_SPAN;
-          }
-          if (newHi > xMax) {
-            newHi = xMax;
-            newLo = xMax - MIN_ZOOM_SPAN;
-          }
-        }
-      }
-      if (newLo <= xMin && newHi >= xMax) setZoom(null);
-      else setZoom([newLo, newHi]);
-    };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, []);
-
-  if (series.length < 4) {
-    return (
-      <div
-        style={{
-          height: 520,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "rgba(180,180,200,0.35)",
-          fontFamily: mono,
-          fontSize: 13,
-        }}
-      >
-        no data — click Refresh to load
-      </div>
-    );
-  }
-
-  const chartData: ChartDatum[] = series.map((p) => ({
-    t: p.time * 1000,
-    price: p.price ?? undefined,
-    q01: p.q01,
-    q10: p.q10,
-    q25: p.q25,
-    q50: p.q50,
-    q75: p.q75,
-    q95: p.q95,
-    q99: p.q99,
-    disl1: p.disl1,
-    disl2: p.disl2,
-    disl3: p.disl3,
-    disl4: p.disl4,
-    gold: [p.disl4, p.disl1],
-  }));
-
-  const histSeries = series.filter((p) => p.price != null);
-  const lastHistMs = (histSeries[histSeries.length - 1]?.time ?? nowSec) * 1000;
-  const nowMs = nowSec * 1000;
-
-  // X domain (linear calendar time, ms) — full extent to end of projection.
-  const lastIdx = chartData.length - 1;
-  const xMin = chartData[0].t;
-  const xMax = chartData[lastIdx].t;
-  boundsRef.current = { xMin, xMax };
-
-  // Active window: full range unless the user has zoomed (scroll wheel or drag).
-  const [lo, hi] = zoom ?? [xMin, xMax];
-  const isZoomed = zoom != null;
-
-  // Y domain — auto-fit to the data visible inside the active window, so zooming
-  // in on a time period reveals price detail instead of staying global.
-  const visible = series.filter((p) => p.time * 1000 >= lo && p.time * 1000 <= hi);
-  const yVals = (visible.length ? visible : series).flatMap((p) => [
-    p.disl4,
-    p.q99,
-    ...(p.price != null ? [p.price] : []),
-  ]);
-  const yMin = Math.min(...yVals) * 0.7;
-  const yMax = Math.max(...yVals) * 1.4;
-  const yTicks = Y_TICKS.filter((t) => t >= yMin * 0.9 && t <= yMax * 1.1);
-
-  // X ticks — adaptive granularity (years → quarters → months) as you zoom in.
-  const computed = computeXTicks(lo, hi);
-  // Guard ultra-tight windows that produce no boundary ticks: fall back to ends.
-  const xTicks = computed.ticks.length > 0 ? computed.ticks : [lo, hi];
-  const xFmt = computed.fmt;
-
-  const peakAnnotations = cyclePeaks.map((p) => ({
-    ...p,
-    t: p.time * 1000,
-  }));
-
-  // Commit a drag selection (if the user dragged a non-trivial range) to zoom.
-  const zoomEnd = () => {
-    if (refLeft != null && refRight != null && refLeft !== refRight) {
-      const a = Math.min(refLeft, refRight);
-      const b = Math.max(refLeft, refRight);
-      if (b - a >= MIN_ZOOM_SPAN) setZoom([a, b]);
-    }
-    setRefLeft(null);
-    setRefRight(null);
-  };
+  const containerW = containerRef.current?.clientWidth ?? 0;
+  const tipFlip = tooltip != null && containerW > 0 && tooltip.x > containerW * 0.62;
 
   return (
     <div>
@@ -395,181 +531,93 @@ function BtcQuantileChart({ series, cyclePeaks }: ChartProps) {
           }}
         >
           <span style={{ fontSize: 9, fontFamily: mono, color: "rgba(180,180,200,0.4)" }}>
-            scroll to zoom · drag to select a range · double-click to reset
+            scroll to zoom · drag to pan · double-click to reset
           </span>
-          {isZoomed && (
-            <button
-              onClick={() => setZoom(null)}
-              style={{
-                fontFamily: mono,
-                fontSize: 9,
-                color: "rgba(220,225,235,0.85)",
-                background: "rgba(120,160,255,0.12)",
-                border: "1px solid rgba(120,160,255,0.35)",
-                borderRadius: 4,
-                padding: "3px 8px",
-                cursor: "pointer",
-              }}
-            >
-              Reset zoom
-            </button>
-          )}
+          <button
+            onClick={resetZoom}
+            style={{
+              fontFamily: mono,
+              fontSize: 9,
+              color: "rgba(220,225,235,0.85)",
+              background: "rgba(120,160,255,0.12)",
+              border: "1px solid rgba(120,160,255,0.35)",
+              borderRadius: 4,
+              padding: "3px 8px",
+              cursor: "pointer",
+            }}
+          >
+            Reset zoom
+          </button>
         </div>
       </div>
 
-      <div ref={wrapRef} style={{ userSelect: "none", touchAction: "none" }}>
-      <ResponsiveContainer width="100%" height={900}>
-        <ComposedChart
-          data={chartData}
-          margin={{ top: 10, right: 8, bottom: 28, left: 8 }}
-          onMouseDown={(e: any) => {
-            const x = Number(e?.activeLabel);
-            if (Number.isFinite(x)) {
-              setRefLeft(x);
-              setRefRight(x);
-            }
-          }}
-          onMouseMove={(e: any) => {
-            const x = Number(e?.activeLabel);
-            if (Number.isFinite(x)) {
-              hoverMsRef.current = x;
-              if (refLeft != null) setRefRight(x);
-            }
-          }}
-          onMouseUp={zoomEnd}
-          onMouseLeave={() => {
-            hoverMsRef.current = null;
-            zoomEnd();
-          }}
-          onDoubleClick={() => setZoom(null)}
-        >
-          {/* X-axis: linear calendar time (ms), adaptive ticks. domain follows the
-              active zoom window (scroll wheel / drag-select drive [lo, hi]). */}
-          <XAxis
-            dataKey="t"
-            type="number"
-            scale="linear"
-            domain={[lo, hi]}
-            allowDataOverflow
-            ticks={xTicks}
-            tickFormatter={xFmt}
-            tick={{ fontSize: 10, fontFamily: mono, fill: "rgba(180,180,200,0.5)" }}
-            axisLine={false}
-            tickLine={false}
-          />
+      <div style={{ position: "relative", height: 900 }}>
+        <div
+          ref={containerRef}
+          style={{ position: "absolute", inset: 0 }}
+          onDoubleClick={resetZoom}
+        />
 
-          {/* Y-axis: log scale price — RIGHT side only */}
-          <YAxis
-            yAxisId="left"
-            orientation="right"
-            scale="log"
-            domain={[yMin, yMax]}
-            ticks={yTicks}
-            tickFormatter={fmtYTick}
-            tick={{ fontSize: 10, fontFamily: mono, fill: "rgba(247,147,26,0.6)" }}
-            axisLine={false}
-            tickLine={false}
-            width={68}
-            allowDataOverflow
-          />
+        {series.length < 4 && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "rgba(180,180,200,0.35)",
+              fontFamily: mono,
+              fontSize: 13,
+            }}
+          >
+            no data — click Refresh to load
+          </div>
+        )}
 
-          {/* Projection zone shading */}
-          <ReferenceArea yAxisId="left" x1={lastHistMs} x2={xMax} fill="rgba(180,180,200,0.025)" stroke="none" />
-
-          {/* Golden dislocation zone: Area between disl4 (bottom) and disl1 (top) */}
-          <Area
-            yAxisId="left"
-            type="monotone"
-            dataKey="gold"
-            fill={GOLD}
-            fillOpacity={0.16}
-            stroke="none"
-            dot={false}
-            isAnimationActive={false}
-            legendType="none"
-          />
-
-          {/* Four dashed dislocation lines below q01 */}
-          {(["disl1", "disl2", "disl3", "disl4"] as const).map((k) => (
-            <Line
-              key={k}
-              yAxisId="left"
-              type="monotone"
-              dataKey={k}
-              stroke={GOLD}
-              strokeOpacity={0.55}
-              strokeDasharray="4 4"
-              strokeWidth={0.9}
-              dot={false}
-              isAnimationActive={false}
-              legendType="none"
-            />
-          ))}
-
-          {/* Seven-quantile fan (no fills between) */}
-          {QLINES.map((q) => (
-            <Line
-              key={q.key}
-              yAxisId="left"
-              type="monotone"
-              dataKey={q.key}
-              stroke={q.color}
-              strokeWidth={1.4}
-              dot={false}
-              isAnimationActive={false}
-              legendType="none"
-            />
-          ))}
-
-          {/* BTC price (null values leave a natural gap in the projection zone) */}
-          <Line
-            yAxisId="left"
-            type="monotone"
-            dataKey="price"
-            stroke="rgba(247,147,26,0.95)"
-            strokeWidth={1.7}
-            dot={false}
-            isAnimationActive={false}
-            connectNulls={false}
-            legendType="none"
-          />
-
-          {/* Today marker */}
-          {nowMs >= lo && nowMs <= hi && (
-            <ReferenceLine yAxisId="left" x={nowMs} stroke="rgba(220,225,235,0.25)" strokeDasharray="3 3"
-              label={{ value: "today", position: "insideTopRight", fontSize: 9, fontFamily: mono, fill: "rgba(220,225,235,0.4)" }}
-            />
-          )}
-
-          {/* Cycle peak markers */}
-          {peakAnnotations
-            .filter((peak) => peak.t >= lo && peak.t <= hi)
-            .map((peak) => (
-              <ReferenceLine yAxisId="left" key={peak.label} x={peak.t}
-                stroke="rgba(220,225,235,0.18)" strokeDasharray="2 3"
-                label={{ value: `${peak.label}  ${fmtPrice(peak.price)}`, position: "insideTopLeft", fontSize: 8, fontFamily: mono, fill: "rgba(247,147,26,0.65)" }}
-              />
-            ))}
-
-          {/* Drag-to-select zoom region (highlighted while dragging) */}
-          {refLeft != null && refRight != null && refLeft !== refRight && (
-            <ReferenceArea
-              yAxisId="left"
-              x1={refLeft}
-              x2={refRight}
-              fill="rgba(120,160,255,0.14)"
-              stroke="rgba(120,160,255,0.45)"
-              strokeOpacity={0.6}
-            />
-          )}
-
-          <Tooltip
-            content={<ChartTooltip />}
-            cursor={{ stroke: "rgba(220,225,235,0.3)", strokeDasharray: "3 3" }}
-            isAnimationActive={false}
-          />
-        </ComposedChart>
-      </ResponsiveContainer>
+        {tooltip && (
+          <div
+            style={{
+              position: "absolute",
+              left: tipFlip ? undefined : tooltip.x + 16,
+              right: tipFlip ? containerW - tooltip.x + 16 : undefined,
+              top: Math.max(8, tooltip.y - 10),
+              pointerEvents: "none",
+              background: "rgba(18,20,28,0.96)",
+              border: "1px solid rgba(120,130,160,0.3)",
+              borderRadius: 6,
+              padding: "8px 10px",
+              fontFamily: mono,
+              fontSize: 10,
+              lineHeight: 1.6,
+              color: "rgba(220,225,235,0.85)",
+              boxShadow: "0 4px 18px rgba(0,0,0,0.45)",
+              zIndex: 5,
+            }}
+          >
+            <div style={{ color: "rgba(180,180,200,0.7)", marginBottom: 4 }}>
+              {`${MON[new Date(tooltip.p.time * 1000).getUTCMonth()]} ${new Date(tooltip.p.time * 1000).getUTCDate()}, ${new Date(tooltip.p.time * 1000).getUTCFullYear()}`}
+            </div>
+            {tooltip.p.price != null && (
+              <div style={{ color: "rgba(247,147,26,0.95)", fontWeight: 600, marginBottom: 4 }}>
+                BTC&nbsp;&nbsp;{fmtPrice(tooltip.p.price)}
+              </div>
+            )}
+            {tipRows.map((r) => {
+              const v = tooltip.p[r.k] as number | null;
+              if (v == null) return null;
+              return (
+                <div
+                  key={r.k as string}
+                  style={{ display: "flex", justifyContent: "space-between", gap: 14 }}
+                >
+                  <span style={{ color: r.color }}>{r.label}</span>
+                  <span>{fmtPrice(v)}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
