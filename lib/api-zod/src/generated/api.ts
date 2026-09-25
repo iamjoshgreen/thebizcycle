@@ -1421,3 +1421,226 @@ export const RefreshBtcQuantileResponse = zod.object({
     .number()
     .describe("Unix seconds when this data was last refreshed"),
 });
+
+/**
+ * Pure database SELECT. Returns 404 if no row has ever been written for this indicator.
+ * @summary Get 10-year rate shock payload from the database
+ */
+export const GetRateShockResponse = zod.object({
+  latestTime: zod.number().nullable(),
+  latestYield: zod.number().nullable(),
+  baseTime: zod
+    .number()
+    .nullable()
+    .describe("Unix seconds, 63 trading days before latestTime"),
+  baseYield: zod.number().nullable(),
+  change1dBp: zod.number().nullable(),
+  change5dBp: zod.number().nullable(),
+  change21dBp: zod.number().nullable(),
+  change63dBp: zod
+    .number()
+    .nullable()
+    .describe(
+      "Headline — 10Y change over 63 trading days (~3 months), in basis points",
+    ),
+  windowTradingDays: zod.number(),
+  warnThresholdBp: zod.number(),
+  shockThresholdBp: zod.number(),
+  status: zod.enum(["calm", "warning", "shock", "insufficient"]),
+  statusLabel: zod.string(),
+  translation: zod.string(),
+  blurb: zod.string(),
+  triggers: zod.array(
+    zod.object({
+      tradingDaysAhead: zod.number(),
+      approxDate: zod
+        .number()
+        .describe(
+          "Unix seconds — latest date plus N weekdays (ignores holidays)",
+        ),
+      baseTime: zod
+        .number()
+        .describe(
+          "Unix seconds — the date that becomes the 3-month-ago base on that day",
+        ),
+      baseYield: zod.number(),
+      triggerYield: zod
+        .number()
+        .describe(
+          "10Y level needed on that day for a +100bp 3-month rise, in %",
+        ),
+    }),
+  ),
+  history: zod
+    .array(
+      zod.object({
+        time: zod
+          .number()
+          .describe("Unix seconds, last trading day of the week (UTC)"),
+        value: zod.number(),
+      }),
+    )
+    .describe("Weekly 3-month change in bp since 1962"),
+  yieldHistory: zod
+    .array(
+      zod.object({
+        time: zod
+          .number()
+          .describe("Unix seconds, last trading day of the week (UTC)"),
+        value: zod.number(),
+      }),
+    )
+    .describe("Weekly 10Y yield level in % since 1962"),
+  episodes: zod.array(
+    zod.object({
+      startTime: zod
+        .number()
+        .describe(
+          "Unix seconds, first day the 3-month rise crossed the shock threshold",
+        ),
+      peakTime: zod
+        .number()
+        .describe(
+          "Unix seconds, day of the largest 3-month rise within the episode",
+        ),
+      peakChangeBp: zod.number(),
+      fromYield: zod
+        .number()
+        .describe("10Y yield 63 trading days before the peak, in %"),
+      toYield: zod.number().describe("10Y yield at the peak, in %"),
+      active: zod
+        .boolean()
+        .describe(
+          "True if the episode is still running as of the latest print",
+        ),
+      context: zod
+        .string()
+        .nullable()
+        .describe(
+          "What happened during or shortly after the episode. Null when nothing clearly broke.",
+        ),
+    }),
+  ),
+  nberRecessions: zod.array(
+    zod.object({
+      start: zod.number(),
+      end: zod.number(),
+    }),
+  ),
+  partialData: zod.boolean(),
+  notes: zod.array(zod.string()),
+  lastUpdated: zod
+    .number()
+    .describe("Unix seconds when this data was last refreshed"),
+});
+
+/**
+ * @summary Force refresh 10-year rate shock data
+ */
+export const RefreshRateShockResponse = zod.object({
+  latestTime: zod.number().nullable(),
+  latestYield: zod.number().nullable(),
+  baseTime: zod
+    .number()
+    .nullable()
+    .describe("Unix seconds, 63 trading days before latestTime"),
+  baseYield: zod.number().nullable(),
+  change1dBp: zod.number().nullable(),
+  change5dBp: zod.number().nullable(),
+  change21dBp: zod.number().nullable(),
+  change63dBp: zod
+    .number()
+    .nullable()
+    .describe(
+      "Headline — 10Y change over 63 trading days (~3 months), in basis points",
+    ),
+  windowTradingDays: zod.number(),
+  warnThresholdBp: zod.number(),
+  shockThresholdBp: zod.number(),
+  status: zod.enum(["calm", "warning", "shock", "insufficient"]),
+  statusLabel: zod.string(),
+  translation: zod.string(),
+  blurb: zod.string(),
+  triggers: zod.array(
+    zod.object({
+      tradingDaysAhead: zod.number(),
+      approxDate: zod
+        .number()
+        .describe(
+          "Unix seconds — latest date plus N weekdays (ignores holidays)",
+        ),
+      baseTime: zod
+        .number()
+        .describe(
+          "Unix seconds — the date that becomes the 3-month-ago base on that day",
+        ),
+      baseYield: zod.number(),
+      triggerYield: zod
+        .number()
+        .describe(
+          "10Y level needed on that day for a +100bp 3-month rise, in %",
+        ),
+    }),
+  ),
+  history: zod
+    .array(
+      zod.object({
+        time: zod
+          .number()
+          .describe("Unix seconds, last trading day of the week (UTC)"),
+        value: zod.number(),
+      }),
+    )
+    .describe("Weekly 3-month change in bp since 1962"),
+  yieldHistory: zod
+    .array(
+      zod.object({
+        time: zod
+          .number()
+          .describe("Unix seconds, last trading day of the week (UTC)"),
+        value: zod.number(),
+      }),
+    )
+    .describe("Weekly 10Y yield level in % since 1962"),
+  episodes: zod.array(
+    zod.object({
+      startTime: zod
+        .number()
+        .describe(
+          "Unix seconds, first day the 3-month rise crossed the shock threshold",
+        ),
+      peakTime: zod
+        .number()
+        .describe(
+          "Unix seconds, day of the largest 3-month rise within the episode",
+        ),
+      peakChangeBp: zod.number(),
+      fromYield: zod
+        .number()
+        .describe("10Y yield 63 trading days before the peak, in %"),
+      toYield: zod.number().describe("10Y yield at the peak, in %"),
+      active: zod
+        .boolean()
+        .describe(
+          "True if the episode is still running as of the latest print",
+        ),
+      context: zod
+        .string()
+        .nullable()
+        .describe(
+          "What happened during or shortly after the episode. Null when nothing clearly broke.",
+        ),
+    }),
+  ),
+  nberRecessions: zod.array(
+    zod.object({
+      start: zod.number(),
+      end: zod.number(),
+    }),
+  ),
+  partialData: zod.boolean(),
+  notes: zod.array(zod.string()),
+  lastUpdated: zod
+    .number()
+    .describe("Unix seconds when this data was last refreshed"),
+});

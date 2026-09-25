@@ -556,3 +556,77 @@ export interface BtcQuantilePayload {
   /** Unix seconds when this data was last refreshed */
   lastUpdated: number;
 }
+
+export type RateShockStatus =
+  (typeof RateShockStatus)[keyof typeof RateShockStatus];
+
+export const RateShockStatus = {
+  calm: "calm",
+  warning: "warning",
+  shock: "shock",
+  insufficient: "insufficient",
+} as const;
+
+export interface RateShockPoint {
+  /** Unix seconds, last trading day of the week (UTC) */
+  time: number;
+  value: number;
+}
+
+export interface RateShockEpisode {
+  /** Unix seconds, first day the 3-month rise crossed the shock threshold */
+  startTime: number;
+  /** Unix seconds, day of the largest 3-month rise within the episode */
+  peakTime: number;
+  peakChangeBp: number;
+  /** 10Y yield 63 trading days before the peak, in % */
+  fromYield: number;
+  /** 10Y yield at the peak, in % */
+  toYield: number;
+  /** True if the episode is still running as of the latest print */
+  active: boolean;
+  /** What happened during or shortly after the episode. Null when nothing clearly broke. */
+  context: string | null;
+}
+
+export interface RateShockTrigger {
+  tradingDaysAhead: number;
+  /** Unix seconds — latest date plus N weekdays (ignores holidays) */
+  approxDate: number;
+  /** Unix seconds — the date that becomes the 3-month-ago base on that day */
+  baseTime: number;
+  baseYield: number;
+  /** 10Y level needed on that day for a +100bp 3-month rise, in % */
+  triggerYield: number;
+}
+
+export interface RateShockPayload {
+  latestTime: number | null;
+  latestYield: number | null;
+  /** Unix seconds, 63 trading days before latestTime */
+  baseTime: number | null;
+  baseYield: number | null;
+  change1dBp: number | null;
+  change5dBp: number | null;
+  change21dBp: number | null;
+  /** Headline — 10Y change over 63 trading days (~3 months), in basis points */
+  change63dBp: number | null;
+  windowTradingDays: number;
+  warnThresholdBp: number;
+  shockThresholdBp: number;
+  status: RateShockStatus;
+  statusLabel: string;
+  translation: string;
+  blurb: string;
+  triggers: RateShockTrigger[];
+  /** Weekly 3-month change in bp since 1962 */
+  history: RateShockPoint[];
+  /** Weekly 10Y yield level in % since 1962 */
+  yieldHistory: RateShockPoint[];
+  episodes: RateShockEpisode[];
+  nberRecessions: NberRecessionInterval[];
+  partialData: boolean;
+  notes: string[];
+  /** Unix seconds when this data was last refreshed */
+  lastUpdated: number;
+}

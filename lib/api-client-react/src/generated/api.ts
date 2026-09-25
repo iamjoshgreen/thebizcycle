@@ -24,6 +24,7 @@ import type {
   HealthStatus,
   HousingPayload,
   NoDataError,
+  RateShockPayload,
   RecessionPayload,
   SettingsPayload,
   SettingsWriteBody,
@@ -1209,4 +1210,161 @@ export const useRefreshBtcQuantile = <
   TContext
 > => {
   return useMutation(getRefreshBtcQuantileMutationOptions(options));
+};
+
+/**
+ * Pure database SELECT. Returns 404 if no row has ever been written for this indicator.
+ * @summary Get 10-year rate shock payload from the database
+ */
+export const getGetRateShockUrl = () => {
+  return `/api/rate-shock`;
+};
+
+export const getRateShock = async (
+  options?: RequestInit,
+): Promise<RateShockPayload> => {
+  return customFetch<RateShockPayload>(getGetRateShockUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetRateShockQueryKey = () => {
+  return [`/api/rate-shock`] as const;
+};
+
+export const getGetRateShockQueryOptions = <
+  TData = Awaited<ReturnType<typeof getRateShock>>,
+  TError = ErrorType<NoDataError>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getRateShock>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetRateShockQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getRateShock>>> = ({
+    signal,
+  }) => getRateShock({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getRateShock>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetRateShockQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getRateShock>>
+>;
+export type GetRateShockQueryError = ErrorType<NoDataError>;
+
+/**
+ * @summary Get 10-year rate shock payload from the database
+ */
+
+export function useGetRateShock<
+  TData = Awaited<ReturnType<typeof getRateShock>>,
+  TError = ErrorType<NoDataError>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getRateShock>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetRateShockQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Force refresh 10-year rate shock data
+ */
+export const getRefreshRateShockUrl = () => {
+  return `/api/rate-shock/refresh`;
+};
+
+export const refreshRateShock = async (
+  options?: RequestInit,
+): Promise<RateShockPayload> => {
+  return customFetch<RateShockPayload>(getRefreshRateShockUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRefreshRateShockMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof refreshRateShock>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof refreshRateShock>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["refreshRateShock"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof refreshRateShock>>,
+    void
+  > = () => {
+    return refreshRateShock(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RefreshRateShockMutationResult = NonNullable<
+  Awaited<ReturnType<typeof refreshRateShock>>
+>;
+
+export type RefreshRateShockMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Force refresh 10-year rate shock data
+ */
+export const useRefreshRateShock = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof refreshRateShock>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof refreshRateShock>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getRefreshRateShockMutationOptions(options));
 };

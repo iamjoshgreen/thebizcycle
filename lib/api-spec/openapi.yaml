@@ -264,6 +264,39 @@ paths:
               schema:
                 $ref: "#/components/schemas/BtcQuantilePayload"
 
+  /rate-shock:
+    get:
+      operationId: getRateShock
+      tags: [rateShock]
+      summary: Get 10-year rate shock payload from the database
+      description: Pure database SELECT. Returns 404 if no row has ever been written for this indicator.
+      responses:
+        "200":
+          description: Rate shock payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RateShockPayload"
+        "404":
+          description: No data has been saved for this indicator yet
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NoDataError"
+
+  /rate-shock/refresh:
+    post:
+      operationId: refreshRateShock
+      tags: [rateShock]
+      summary: Force refresh 10-year rate shock data
+      responses:
+        "200":
+          description: Refreshed rate shock payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RateShockPayload"
+
 components:
   schemas:
     NoDataError:
@@ -1330,4 +1363,173 @@ components:
         - goldenTop
         - goldenBottom
         - modelNote
+        - lastUpdated
+
+    RateShockStatus:
+      type: string
+      enum: [calm, warning, shock, insufficient]
+
+    RateShockPoint:
+      type: object
+      properties:
+        time:
+          type: number
+          description: Unix seconds, last trading day of the week (UTC)
+        value:
+          type: number
+      required: [time, value]
+
+    RateShockEpisode:
+      type: object
+      properties:
+        startTime:
+          type: number
+          description: Unix seconds, first day the 3-month rise crossed the shock threshold
+        peakTime:
+          type: number
+          description: Unix seconds, day of the largest 3-month rise within the episode
+        peakChangeBp:
+          type: number
+        fromYield:
+          type: number
+          description: 10Y yield 63 trading days before the peak, in %
+        toYield:
+          type: number
+          description: 10Y yield at the peak, in %
+        active:
+          type: boolean
+          description: True if the episode is still running as of the latest print
+        context:
+          type: string
+          nullable: true
+          description: What happened during or shortly after the episode. Null when nothing clearly broke.
+      required:
+        - startTime
+        - peakTime
+        - peakChangeBp
+        - fromYield
+        - toYield
+        - active
+        - context
+
+    RateShockTrigger:
+      type: object
+      properties:
+        tradingDaysAhead:
+          type: number
+        approxDate:
+          type: number
+          description: Unix seconds — latest date plus N weekdays (ignores holidays)
+        baseTime:
+          type: number
+          description: Unix seconds — the date that becomes the 3-month-ago base on that day
+        baseYield:
+          type: number
+        triggerYield:
+          type: number
+          description: 10Y level needed on that day for a +100bp 3-month rise, in %
+      required:
+        - tradingDaysAhead
+        - approxDate
+        - baseTime
+        - baseYield
+        - triggerYield
+
+    RateShockPayload:
+      type: object
+      properties:
+        latestTime:
+          type: number
+          nullable: true
+        latestYield:
+          type: number
+          nullable: true
+        baseTime:
+          type: number
+          nullable: true
+          description: Unix seconds, 63 trading days before latestTime
+        baseYield:
+          type: number
+          nullable: true
+        change1dBp:
+          type: number
+          nullable: true
+        change5dBp:
+          type: number
+          nullable: true
+        change21dBp:
+          type: number
+          nullable: true
+        change63dBp:
+          type: number
+          nullable: true
+          description: Headline — 10Y change over 63 trading days (~3 months), in basis points
+        windowTradingDays:
+          type: number
+        warnThresholdBp:
+          type: number
+        shockThresholdBp:
+          type: number
+        status:
+          $ref: "#/components/schemas/RateShockStatus"
+        statusLabel:
+          type: string
+        translation:
+          type: string
+        blurb:
+          type: string
+        triggers:
+          type: array
+          items:
+            $ref: "#/components/schemas/RateShockTrigger"
+        history:
+          type: array
+          description: Weekly 3-month change in bp since 1962
+          items:
+            $ref: "#/components/schemas/RateShockPoint"
+        yieldHistory:
+          type: array
+          description: Weekly 10Y yield level in % since 1962
+          items:
+            $ref: "#/components/schemas/RateShockPoint"
+        episodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/RateShockEpisode"
+        nberRecessions:
+          type: array
+          items:
+            $ref: "#/components/schemas/NberRecessionInterval"
+        partialData:
+          type: boolean
+        notes:
+          type: array
+          items:
+            type: string
+        lastUpdated:
+          type: number
+          description: Unix seconds when this data was last refreshed
+      required:
+        - latestTime
+        - latestYield
+        - baseTime
+        - baseYield
+        - change1dBp
+        - change5dBp
+        - change21dBp
+        - change63dBp
+        - windowTradingDays
+        - warnThresholdBp
+        - shockThresholdBp
+        - status
+        - statusLabel
+        - translation
+        - blurb
+        - triggers
+        - history
+        - yieldHistory
+        - episodes
+        - nberRecessions
+        - partialData
+        - notes
         - lastUpdated

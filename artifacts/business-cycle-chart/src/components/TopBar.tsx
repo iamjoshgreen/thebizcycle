@@ -72,6 +72,7 @@ const TABS: { path: string; label: string; short: string }[] = [
   { path: "/channel", label: "Channel", short: "Channel" },
   { path: "/housing", label: "Housing", short: "Housing" },
   { path: "/recession", label: "Recession", short: "Recess." },
+  { path: "/rate-shock", label: "Rate Shock", short: "Rates" },
   { path: "/cyclical", label: "Cyclical GDP", short: "GDP" },
   { path: "/gli", label: "Global Liquidity", short: "GLI" },
   { path: "/btc-quantile", label: "BTC Quantile", short: "BTC Q" },
