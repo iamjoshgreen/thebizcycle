@@ -62,6 +62,10 @@ export default defineConfig({
     port,
     host: "0.0.0.0",
     allowedHosts: true,
+    // Local dev against a remote API: API_PROXY=https://aheadoftheturn.com
+    ...(process.env.API_PROXY
+      ? { proxy: { "/api": { target: process.env.API_PROXY, changeOrigin: true, cookieDomainRewrite: "localhost" } } }
+      : {}),
     fs: {
       strict: true,
       deny: ["**/.*"],

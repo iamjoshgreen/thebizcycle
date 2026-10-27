@@ -18,7 +18,7 @@ export function AuthShell({ title, subtitle, children }: { title: string; subtit
 }
 
 export const fieldStyle = {
-  width: "100%", padding: "10px 12px", borderRadius: 6, fontSize: 14,
+  width: "100%", padding: "10px 12px", borderRadius: 6, fontSize: 16, // 16px+ stops iOS auto-zoom on focus
   background: "hsl(230 14% 8%)", color: "hsl(220 14% 95%)", border: "1px solid hsl(230 10% 20%)", outline: "none",
 } as const;
 
