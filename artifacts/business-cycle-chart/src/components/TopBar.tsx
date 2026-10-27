@@ -1,5 +1,5 @@
-import { useState, type ReactElement } from "react";
-import { AlertTriangle, Check, Loader2, RefreshCw, UserRound } from "lucide-react";
+import { useEffect, useState, type ReactElement } from "react";
+import { AlertTriangle, Check, Loader2, Menu, RefreshCw, UserRound, X } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import type { SaveStatus } from "@/hooks/use-persisted-settings";
 import { useAuth } from "@/lib/auth";
@@ -94,7 +94,7 @@ function Tabs() {
   const [location] = useLocation();
   return (
     <div
-      className="flex items-center gap-1 overflow-x-auto flex-1 min-w-0 -mx-1 px-1 scrollbar-none"
+      className="hidden sm:flex items-center gap-1 overflow-x-auto flex-1 min-w-0 -mx-1 px-1 scrollbar-none"
       style={{ scrollbarWidth: "none" }}
     >
       <div
@@ -121,6 +121,71 @@ function Tabs() {
           </Link>
         );
       })}
+    </div>
+  );
+}
+
+/** Mobile: hamburger -> full-screen menu with tabs, account links, refresh. */
+function MobileMenu({ onRefresh, isRefreshing }: { onRefresh: () => void; isRefreshing: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [location] = useLocation();
+  const { user, logout } = useAuth();
+  useEffect(() => {
+    document.body.style.overflow = open ? "hidden" : "";
+    return () => { document.body.style.overflow = ""; };
+  }, [open]);
+  const active = TABS.find((t) => t.path === location);
+  return (
+    <div className="flex sm:hidden items-center gap-2 flex-1 min-w-0">
+      <button onClick={() => setOpen(true)} aria-label="Open menu"
+        className="flex items-center justify-center w-8 h-8 rounded shrink-0"
+        style={{ background: "hsl(230 12% 14%)", color: "hsl(220 14% 85%)", border: "1px solid hsl(230 10% 18%)" }}
+        data-testid="button-menu">
+        <Menu size={16} />
+      </button>
+      <span className="text-sm font-semibold truncate" style={{ color: "hsl(220 14% 95%)", fontFamily: "'Inter', sans-serif", letterSpacing: "-0.01em" }}>
+        {active?.label ?? "Ahead of the Turn"}
+      </span>
+      {open && (
+        <div className="fixed inset-0 z-50 flex flex-col" style={{ background: "hsl(230 14% 8%)", paddingTop: "env(safe-area-inset-top)", paddingBottom: "env(safe-area-inset-bottom)" }} role="dialog" aria-modal="true">
+          <div className="flex items-center justify-between h-11 px-3 border-b shrink-0" style={{ borderColor: "hsl(230 10% 14%)" }}>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full" style={{ background: "hsl(224 100% 58%)" }} />
+              <span className="text-xs tracking-wide" style={{ color: "hsl(220 10% 45%)", fontFamily: "'JetBrains Mono', monospace" }}>AHEAD OF THE TURN</span>
+            </div>
+            <button onClick={() => setOpen(false)} aria-label="Close menu" className="w-8 h-8 flex items-center justify-center rounded" style={{ color: "hsl(220 14% 85%)" }}>
+              <X size={18} />
+            </button>
+          </div>
+          <nav className="flex-1 overflow-y-auto px-4 py-4">
+            {TABS.map((tab) => {
+              const isActive = location === tab.path;
+              return (
+                <Link key={tab.path} href={tab.path} onClick={() => setOpen(false)}
+                  className="block py-3 text-xl font-semibold tracking-tight border-b"
+                  style={{ color: isActive ? "hsl(224 100% 72%)" : "hsl(220 14% 90%)", borderColor: "hsl(230 10% 12%)", fontFamily: "'Inter', sans-serif", letterSpacing: "-0.02em" }}
+                  data-testid={`menu-${tab.path === "/" ? "home" : tab.path.slice(1)}`}>
+                  {tab.label}
+                </Link>
+              );
+            })}
+            <button onClick={() => { setOpen(false); onRefresh(); }} disabled={isRefreshing}
+              className="flex items-center gap-2 py-3 mt-2 text-base disabled:opacity-50" style={{ color: "hsl(220 14% 65%)", fontFamily: "'Inter', sans-serif" }}>
+              <RefreshCw size={14} className={isRefreshing ? "animate-spin" : ""} /> Refresh data
+            </button>
+          </nav>
+          {user && (
+            <div className="px-4 py-4 border-t shrink-0" style={{ borderColor: "hsl(230 10% 14%)" }}>
+              <div className="text-xs mb-2 truncate" style={{ color: "hsl(220 10% 45%)", fontFamily: "'JetBrains Mono', monospace" }}>{user.email}</div>
+              <div className="flex gap-4 text-sm" style={{ fontFamily: "'Inter', sans-serif" }}>
+                <Link href="/account" onClick={() => setOpen(false)} style={{ color: "hsl(220 14% 85%)" }}>Account</Link>
+                {user.role === "admin" && <Link href="/admin" onClick={() => setOpen(false)} style={{ color: "hsl(220 14% 85%)" }}>Admin</Link>}
+                <button onClick={() => { setOpen(false); void logout(); }} style={{ color: "hsl(220 10% 55%)" }}>Sign out</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -165,13 +230,15 @@ export default function TopBar({ lastUpdated, isRefreshing, onRefresh, saveStatu
       }}
       data-testid="topbar"
     >
-      {/* Left — title + tabs (scrolls on mobile) */}
+      {/* Left — hamburger + current tab on mobile, tab strip on sm+ */}
+      <MobileMenu onRefresh={onRefresh} isRefreshing={isRefreshing} />
       <Tabs />
 
       {/* Right — save indicator + last updated + refresh, grouped so they
           never collide with the tabs as they grow on wider routes. */}
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
         <SaveIndicator status={saveStatus} />
+        <div className="hidden sm:flex items-center gap-2 sm:gap-3">
         {lastUpdated ? (
           <span
             className="text-xs hidden md:inline"
@@ -226,6 +293,7 @@ export default function TopBar({ lastUpdated, isRefreshing, onRefresh, saveStatu
         <span className="hidden sm:inline">Refresh</span>
       </button>
         <AccountMenu />
+        </div>
       </div>
     </header>
   );
