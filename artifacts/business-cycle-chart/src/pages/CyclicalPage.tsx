@@ -520,7 +520,7 @@ export default function CyclicalPage() {
   return (
     <div
       style={{
-        minHeight: "100vh",
+        minHeight: "100dvh",
         background: "hsl(230 14% 6%)",
         color: "rgba(220,225,235,0.9)",
         display: "flex",

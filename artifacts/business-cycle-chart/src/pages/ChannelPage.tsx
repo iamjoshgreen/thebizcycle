@@ -719,7 +719,7 @@ export default function ChannelPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen" style={{ background: "#0A0A0D" }}>
+    <div className="flex flex-col h-[100dvh]" style={{ background: "#0A0A0D" }}>
       <TopBar
         lastUpdated={lastUpdated}
         isRefreshing={refreshMutation.isPending}

@@ -32,7 +32,7 @@ export default function AdminPage() {
 
   if (!me || me.role !== "admin") return null;
   return (
-    <div className="min-h-screen p-4 sm:p-8" style={{ background: "hsl(230 14% 8%)", color: "hsl(220 14% 85%)", fontFamily: "'Inter', sans-serif" }}>
+    <div className="min-h-[100dvh] p-4 sm:p-8" style={{ background: "hsl(230 14% 8%)", color: "hsl(220 14% 85%)", fontFamily: "'Inter', sans-serif" }}>
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-xl font-semibold tracking-tight" style={{ color: "hsl(220 14% 95%)" }}>Admin</h1>

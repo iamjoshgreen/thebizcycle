@@ -30,7 +30,7 @@ const queryClient = new QueryClient({
 
 function Router() {
   const { user, loading, requireSubscription, subscribed } = useAuth();
-  if (loading) return <div className="min-h-screen" style={{ background: "hsl(230 14% 8%)" }} />;
+  if (loading) return <div className="min-h-[100dvh]" style={{ background: "hsl(230 14% 8%)" }} />;
   if (!user) {
     return (
       <Switch>

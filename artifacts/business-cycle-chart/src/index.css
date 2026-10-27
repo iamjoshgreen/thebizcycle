@@ -157,6 +157,12 @@
     margin: 0;
     padding: 0;
   }
+  /* iOS: 100% / 100vh include the browser chrome, so the page itself scrolls and
+     the header slides under the status bar. dvh tracks the visible area. */
+  @supports (height: 100dvh) {
+    html, body, #root { height: 100dvh; }
+  }
+  body { overscroll-behavior-y: none; }
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
