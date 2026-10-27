@@ -11,6 +11,11 @@ import CyclicalPage from "@/pages/CyclicalPage";
 import GliPage from "@/pages/GliPage";
 import BtcQuantilePage from "@/pages/BtcQuantilePage";
 import RateShockPage from "@/pages/RateShockPage";
+import LoginPage from "@/pages/LoginPage";
+import SignupPage from "@/pages/SignupPage";
+import AccountPage from "@/pages/AccountPage";
+import AdminPage from "@/pages/AdminPage";
+import { AuthProvider, useAuth } from "@/lib/auth";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,8 +29,23 @@ const queryClient = new QueryClient({
 });
 
 function Router() {
+  const { user, loading, requireSubscription, subscribed } = useAuth();
+  if (loading) return <div className="min-h-screen" style={{ background: "hsl(230 14% 8%)" }} />;
+  if (!user) {
+    return (
+      <Switch>
+        <Route path="/signup" component={SignupPage} />
+        <Route component={LoginPage} />
+      </Switch>
+    );
+  }
+  if (requireSubscription && user.role !== "admin" && !subscribed) {
+    return <AccountPage paywalled />;
+  }
   return (
     <Switch>
+      <Route path="/account">{() => <AccountPage />}</Route>
+      {user.role === "admin" && <Route path="/admin" component={AdminPage} />}
       <Route path="/" component={ChartPage} />
       <Route path="/fractal" component={FractalPage} />
       <Route path="/channel" component={ChannelPage} />
@@ -44,7 +64,9 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Router />
+          <AuthProvider>
+            <Router />
+          </AuthProvider>
         </WouterRouter>
         <Toaster />
       </TooltipProvider>

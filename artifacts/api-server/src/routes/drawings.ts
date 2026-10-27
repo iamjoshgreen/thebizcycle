@@ -9,7 +9,7 @@ router.get("/drawings", async (req, res) => {
     const rows = await db
       .select()
       .from(drawingsTable)
-      .where(eq(drawingsTable.id, 1))
+      .where(eq(drawingsTable.userId, req.user!.id))
       .limit(1);
 
     if (rows.length === 0) {
@@ -46,9 +46,9 @@ router.post("/drawings", async (req, res) => {
 
     await db
       .insert(drawingsTable)
-      .values({ id: 1, data: data as object })
+      .values({ userId: req.user!.id, data: data as object })
       .onConflictDoUpdate({
-        target: drawingsTable.id,
+        target: drawingsTable.userId,
         set: { data: data as object, updatedAt: now },
       });
 

@@ -1,18 +1,19 @@
-import { pgTable, text, jsonb, timestamp } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod/v4";
+import { pgTable, text, jsonb, timestamp, integer, primaryKey } from "drizzle-orm/pg-core";
+import { usersTable } from "./users";
 
-export const settingsTable = pgTable("settings", {
-  key: text("key").primaryKey(),
-  value: jsonb("value").notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow()
-    .$onUpdate(() => new Date()),
-});
+/** Per-user UI settings, keyed by (user_id, key). */
+export const settingsTable = pgTable(
+  "settings",
+  {
+    userId: integer("user_id").notNull().references(() => usersTable.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    value: jsonb("value").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.key] })],
+);
 
-export const insertSettingSchema = createInsertSchema(settingsTable).omit({
-  updatedAt: true,
-});
-export type InsertSetting = z.infer<typeof insertSettingSchema>;
 export type Setting = typeof settingsTable.$inferSelect;

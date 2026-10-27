@@ -1,7 +1,8 @@
-import type { ReactElement } from "react";
-import { AlertTriangle, Check, Loader2, RefreshCw } from "lucide-react";
+import { useState, type ReactElement } from "react";
+import { AlertTriangle, Check, Loader2, RefreshCw, UserRound } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import type { SaveStatus } from "@/hooks/use-persisted-settings";
+import { useAuth } from "@/lib/auth";
 
 interface TopBarProps {
   lastUpdated: number | null;
@@ -124,6 +125,34 @@ function Tabs() {
   );
 }
 
+function AccountMenu() {
+  const { user, logout } = useAuth();
+  const [open, setOpen] = useState(false);
+  if (!user) return null;
+  const item = "block w-full text-left px-3 py-1.5 text-xs rounded";
+  return (
+    <div className="relative shrink-0">
+      <button onClick={() => setOpen((o) => !o)} aria-label="Account" title={user.email}
+        className="flex items-center justify-center w-7 h-7 rounded"
+        style={{ background: "hsl(230 12% 14%)", color: "hsl(220 14% 65%)", border: "1px solid hsl(230 10% 18%)" }}
+        data-testid="button-account">
+        <UserRound size={13} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 mt-1 z-50 w-48 rounded border p-1" style={{ background: "hsl(230 12% 11%)", borderColor: "hsl(230 10% 18%)" }}>
+            <div className="px-3 py-1.5 text-xs truncate" style={{ color: "hsl(220 10% 45%)" }}>{user.email}</div>
+            <Link href="/account" className={item} style={{ color: "hsl(220 14% 85%)" }} onClick={() => setOpen(false)}>Account</Link>
+            {user.role === "admin" && <Link href="/admin" className={item} style={{ color: "hsl(220 14% 85%)" }} onClick={() => setOpen(false)}>Admin</Link>}
+            <button className={item} style={{ color: "hsl(220 14% 85%)" }} onClick={() => { setOpen(false); void logout(); }}>Sign out</button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function TopBar({ lastUpdated, isRefreshing, onRefresh, saveStatus = "idle" }: TopBarProps) {
   return (
     <header
@@ -196,6 +225,7 @@ export default function TopBar({ lastUpdated, isRefreshing, onRefresh, saveStatu
         />
         <span className="hidden sm:inline">Refresh</span>
       </button>
+        <AccountMenu />
       </div>
     </header>
   );

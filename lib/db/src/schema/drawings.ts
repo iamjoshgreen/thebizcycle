@@ -1,7 +1,9 @@
 import { pgTable, integer, jsonb, timestamp } from "drizzle-orm/pg-core";
+import { usersTable } from "./users";
 
+/** Per-user chart drawings. One row per user. */
 export const drawingsTable = pgTable("drawings", {
-  id: integer("id").primaryKey(),
+  userId: integer("user_id").primaryKey().references(() => usersTable.id, { onDelete: "cascade" }),
   data: jsonb("data").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()

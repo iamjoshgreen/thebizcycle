@@ -9,10 +9,20 @@ import gliRouter from "./gli";
 import btcQuantileRouter from "./btcQuantile";
 import rateShockRouter from "./rateShock";
 import settingsRouter from "./settings";
+import authRouter from "./auth";
+import adminRouter from "./admin";
+import billingRouter from "./billing";
+import { requireAuth, requireSubscription } from "../lib/auth";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(authRouter);
+router.use(adminRouter);
+router.use(billingRouter);
+
+// Everything below needs a login, and a subscription when the paywall switch is on.
+router.use(requireAuth, requireSubscription);
 router.use(chartRouter);
 router.use(drawingsRouter);
 router.use(housingRouter);

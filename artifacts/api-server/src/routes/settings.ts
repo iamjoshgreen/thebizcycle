@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, settingsTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 
 const router = Router();
 
@@ -21,7 +21,7 @@ router.get("/settings/:key", async (req, res) => {
     const rows = await db
       .select()
       .from(settingsTable)
-      .where(eq(settingsTable.key, key))
+      .where(and(eq(settingsTable.userId, req.user!.id), eq(settingsTable.key, key)))
       .limit(1);
 
     if (rows.length === 0) {
@@ -64,9 +64,9 @@ router.put("/settings/:key", async (req, res) => {
     const now = new Date();
     await db
       .insert(settingsTable)
-      .values({ key, value: body.value as object })
+      .values({ userId: req.user!.id, key, value: body.value as object })
       .onConflictDoUpdate({
-        target: settingsTable.key,
+        target: [settingsTable.userId, settingsTable.key],
         set: { value: body.value as object, updatedAt: now },
       });
 
