@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactElement } from "react";
+import { useEffect, useRef, useState, type ReactElement } from "react";
 import { AlertTriangle, Check, Loader2, Menu, RefreshCw, UserRound, X } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import type { SaveStatus } from "@/hooks/use-persisted-settings";
@@ -125,8 +125,33 @@ function Tabs() {
   );
 }
 
+/** Mobile-only refresh feedback (the desktop button/timestamp are hidden on phones). */
+function MobileRefreshStatus({ isRefreshing }: { isRefreshing: boolean }) {
+  const [justDone, setJustDone] = useState(false);
+  const wasRefreshing = useRef(false);
+  useEffect(() => {
+    if (wasRefreshing.current && !isRefreshing) {
+      setJustDone(true);
+      const t = setTimeout(() => setJustDone(false), 3000);
+      wasRefreshing.current = false;
+      return () => clearTimeout(t);
+    }
+    wasRefreshing.current = isRefreshing;
+    return undefined;
+  }, [isRefreshing]);
+  if (!isRefreshing && !justDone) return null;
+  return (
+    <span className="sm:hidden flex items-center gap-1 text-xs shrink-0" role="status"
+      style={{ color: isRefreshing ? "hsl(224 100% 72%)" : "hsl(150 60% 55%)", fontFamily: "'Inter', sans-serif" }}
+      data-testid="mobile-refresh-status">
+      {isRefreshing ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+      {isRefreshing ? "Refreshing…" : "Updated"}
+    </span>
+  );
+}
+
 /** Mobile: hamburger -> full-screen menu with tabs, account links, refresh. */
-function MobileMenu({ onRefresh, isRefreshing }: { onRefresh: () => void; isRefreshing: boolean }) {
+function MobileMenu({ onRefresh, isRefreshing, lastUpdated }: { onRefresh: () => void; isRefreshing: boolean; lastUpdated?: TopBarProps["lastUpdated"] }) {
   const [open, setOpen] = useState(false);
   const [location] = useLocation();
   const { user, logout } = useAuth();
@@ -171,8 +196,11 @@ function MobileMenu({ onRefresh, isRefreshing }: { onRefresh: () => void; isRefr
             })}
             <button onClick={() => { setOpen(false); onRefresh(); }} disabled={isRefreshing}
               className="flex items-center gap-2 py-3 mt-2 text-base disabled:opacity-50" style={{ color: "hsl(220 14% 65%)", fontFamily: "'Inter', sans-serif" }}>
-              <RefreshCw size={14} className={isRefreshing ? "animate-spin" : ""} /> Refresh data
+              <RefreshCw size={14} className={isRefreshing ? "animate-spin" : ""} /> {isRefreshing ? "Refreshing…" : "Refresh data"}
             </button>
+            <div className="text-xs" style={{ color: "hsl(220 10% 45%)", fontFamily: "'JetBrains Mono', monospace" }}>
+              {lastUpdated ? `Updated ${formatTimestamp(lastUpdated)}` : "No data yet"}
+            </div>
           </nav>
           {user && (
             <div className="px-4 py-4 border-t shrink-0" style={{ borderColor: "hsl(230 10% 14%)" }}>
@@ -231,12 +259,13 @@ export default function TopBar({ lastUpdated, isRefreshing, onRefresh, saveStatu
       data-testid="topbar"
     >
       {/* Left — hamburger + current tab on mobile, tab strip on sm+ */}
-      <MobileMenu onRefresh={onRefresh} isRefreshing={isRefreshing} />
+      <MobileMenu onRefresh={onRefresh} isRefreshing={isRefreshing} lastUpdated={lastUpdated} />
       <Tabs />
 
       {/* Right — save indicator + last updated + refresh, grouped so they
           never collide with the tabs as they grow on wider routes. */}
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        <MobileRefreshStatus isRefreshing={isRefreshing} />
         <SaveIndicator status={saveStatus} />
         <div className="hidden sm:flex items-center gap-2 sm:gap-3">
         {lastUpdated ? (

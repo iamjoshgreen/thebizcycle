@@ -655,7 +655,7 @@ export default function RecessionPage() {
         onRefresh={handleRefresh}
       />
 
-      <div className="flex-1 overflow-auto px-3 py-3 sm:px-6 sm:py-5">
+      <div className="flex-1 min-h-0 overflow-auto overscroll-contain px-3 py-3 sm:px-6 sm:py-5">
         {isLoading && !payload && (
           <div className="flex flex-col items-center justify-center gap-3 py-20">
             <div

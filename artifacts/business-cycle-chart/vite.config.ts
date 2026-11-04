@@ -64,7 +64,20 @@ export default defineConfig({
     allowedHosts: true,
     // Local dev against a remote API: API_PROXY=https://aheadoftheturn.com
     ...(process.env.API_PROXY
-      ? { proxy: { "/api": { target: process.env.API_PROXY, changeOrigin: true, cookieDomainRewrite: "localhost" } } }
+      ? {
+          proxy: {
+            "/api": {
+              target: process.env.API_PROXY,
+              changeOrigin: true,
+              cookieDomainRewrite: "localhost",
+              // DEV_SESSION_COOKIE=<aott_session value>: act as that logged-in user (device testing).
+              configure: (proxy) => {
+                const sess = process.env.DEV_SESSION_COOKIE;
+                if (sess) proxy.on("proxyReq", (req) => { req.setHeader("cookie", `aott_session=${sess}`); });
+              },
+            },
+          },
+        }
       : {}),
     fs: {
       strict: true,
